@@ -1,0 +1,50 @@
+{
+  "types": [
+    {
+      "name": "PERSON",
+      "description": "A human individual who may be employed by a company.",
+      "properties": [
+        {
+          "name": "fullName",
+          "description": "The full legal name of the person.",
+          "dataType": "STRING",
+          "ownerType": "PERSON"
+        },
+        {
+          "name": "email",
+          "description": "Primary email address used to contact the person.",
+          "dataType": "STRING",
+          "ownerType": "PERSON"
+        }
+      ]
+    },
+    {
+      "name": "COMPANY",
+      "description": "An organization which can employ people and generate revenue.",
+      "properties": [
+        {
+          "name": "name",
+          "description": "Registered legal name of the company.",
+          "dataType": "STRING",
+          "ownerType": "COMPANY"
+        },
+        {
+          "name": "revenue",
+          "description": "Latest known annual revenue in USD.",
+          "dataType": "NUMBER",
+          "ownerType": "COMPANY"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "name": "EMPLOYED_BY",
+      "description": "Indicates that a person is or was employed by a company.",
+      "sourceType": "PERSON",
+      "targetType": "COMPANY"
+    }
+  ]
+}
+
+

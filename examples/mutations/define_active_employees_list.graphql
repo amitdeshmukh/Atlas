@@ -1,0 +1,18 @@
+mutation DefineActiveEmployeesList {
+  defineList(
+    name: "ACTIVE_EMPLOYEES"
+    description: "All people currently employed by any company."
+    targetType: "PERSON"
+    filter: {
+      operator: HAS_RELATION
+      relationType: "EMPLOYED_BY"
+    }
+  ) {
+    name
+    description
+    targetType
+    validAt
+  }
+}
+
+

@@ -1,0 +1,62 @@
+mutation UpsertPersonAndCompany {
+  person: upsertNode(
+    type: "PERSON"
+    properties: {
+      fullName: "Alice Example"
+      email: "alice@example.com"
+    }
+  ) {
+    id
+    type
+    properties
+    validAt
+    invalidAt
+  }
+
+  company: upsertNode(
+    type: "COMPANY"
+    properties: {
+      name: "Example Corp"
+      revenue: 5000000
+    }
+  ) {
+    id
+    type
+    properties
+  }
+}
+
+mutation LinkEmploymentByNodeRef {
+  upsertEdgeByNodeRef(
+    relationType: "EMPLOYED_BY"
+    from: {
+      type: "PERSON"
+      key: "email"
+      value: "alice@example.com"
+    }
+    to: {
+      type: "COMPANY"
+      key: "name"
+      value: "Example Corp"
+    }
+  ) {
+    id
+    relationType
+    fromNode {
+      id
+      type
+      properties
+    }
+    toNode {
+      id
+      type
+      properties
+    }
+    validAt
+    invalidAt
+  }
+}
+
+
+
+

@@ -1,0 +1,22 @@
+query TraversePersonRelationships {
+  # Substitute a real PERSON node ID
+  node(id: "<person-id>") {
+    id
+    type
+    properties
+    relationships(direction: BOTH) {
+      id
+      relationType
+      direction
+      otherNode {
+        id
+        type
+        properties
+      }
+      validAt
+      invalidAt
+    }
+  }
+}
+
+

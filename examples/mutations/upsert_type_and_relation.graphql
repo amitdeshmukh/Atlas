@@ -1,0 +1,36 @@
+mutation UpsertOntology {
+  upsertType(
+    name: "PERSON"
+    description: "A human individual who may be employed by a company."
+  ) {
+    name
+    description
+    properties {
+      name
+      description
+      dataType
+    }
+    outgoingRelations {
+      name
+      description
+    }
+  }
+
+  upsertRelation(
+    name: "EMPLOYED_BY"
+    description: "Indicates that a person is or was employed by a company."
+    sourceType: "PERSON"
+    targetType: "COMPANY"
+  ) {
+    name
+    description
+    sourceType {
+      name
+    }
+    targetType {
+      name
+    }
+  }
+}
+
+

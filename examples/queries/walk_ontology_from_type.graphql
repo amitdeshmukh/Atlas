@@ -1,0 +1,125 @@
+# Walk the Ontology Graph from a Type
+#
+# This shows how an agent can explore the ontology (schema) as a graph:
+# - Start at a type (e.g., PERSON)
+# - Discover what relations connect to/from it
+# - Traverse to peer types (COMPANY, etc.)
+# - Learn what properties those peers have
+#
+# This is ONTOLOGY-level traversal (the world model structure),
+# not INSTANCE-level traversal (Alice -> Example Corp).
+
+# Walk from PERSON to discover its ontological neighborhood
+query WalkFromPerson {
+  type(name: "PERSON") {
+    name
+    description
+    
+    # What fields can PERSON nodes have?
+    properties {
+      name
+      description
+      dataType
+    }
+    
+    # What relations can originate FROM a PERSON?
+    # This tells the agent: "A PERSON can be EMPLOYED_BY something"
+    outgoingRelations {
+      name
+      description
+      
+      # Walk to the target type - what can PERSON connect TO?
+      targetType {
+        name
+        description
+        properties {
+          name
+          dataType
+        }
+        # Could continue walking: what can COMPANY connect to?
+        outgoingRelations {
+          name
+          targetType { name }
+        }
+      }
+    }
+    
+    # What relations can point TO a PERSON?
+    # This tells the agent: "Something can have relation X pointing to PERSON"
+    incomingRelations {
+      name
+      description
+      
+      # Walk to the source type - what can point TO a PERSON?
+      sourceType {
+        name
+        description
+        properties {
+          name
+          dataType
+        }
+      }
+    }
+  }
+}
+
+# Walk from COMPANY to see its perspective
+query WalkFromCompany {
+  type(name: "COMPANY") {
+    name
+    description
+    
+    properties {
+      name
+      description
+      dataType
+    }
+    
+    # COMPANY has no outgoing relations in this ontology
+    outgoingRelations {
+      name
+      targetType { name }
+    }
+    
+    # But COMPANY receives EMPLOYED_BY from PERSON
+    incomingRelations {
+      name
+      description
+      sourceType {
+        name
+        description
+        properties {
+          name
+          dataType
+        }
+      }
+    }
+  }
+}
+
+# Discover all types connected to PERSON (direct peers)
+# Useful for agent to understand "what entities relate to PERSON?"
+query DiscoverPeersOfPerson {
+  type(name: "PERSON") {
+    name
+    
+    # Types that PERSON can connect TO
+    outgoingRelations {
+      name
+      targetType {
+        name
+        description
+      }
+    }
+    
+    # Types that can connect TO PERSON
+    incomingRelations {
+      name
+      sourceType {
+        name
+        description
+      }
+    }
+  }
+}
+

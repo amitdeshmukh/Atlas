@@ -1,0 +1,242 @@
+# =============================================================================
+# List Queries Using HAS_RELATION and NOT Operators
+# =============================================================================
+# Lists are "named, described, temporal predicates over objects" (PRD).
+# Membership is computed dynamically - you can't "add" items to a list.
+# Instead, objects match (or don't match) the list's filter definition.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# STEP 1: Define lists based on relationship presence
+# -----------------------------------------------------------------------------
+
+# People who ARE employed (have EMPLOYED_BY relationship)
+mutation DefineEmployedPeopleList {
+  defineList(
+    name: "EMPLOYED_PEOPLE"
+    description: "People who are currently employed by at least one company"
+    targetType: "PERSON"
+    filter: {
+      operator: HAS_RELATION
+      relationType: "EMPLOYED_BY"
+    }
+  ) {
+    name
+    description
+    targetType
+    filter {
+      operator
+      relationType
+    }
+  }
+}
+
+# People who are NOT employed (no EMPLOYED_BY relationship)
+mutation DefineUnemployedPeopleList {
+  defineList(
+    name: "UNEMPLOYED_PEOPLE"
+    description: "People who are not currently employed by any company"
+    targetType: "PERSON"
+    filter: {
+      operator: NOT
+      operands: [
+        {
+          operator: HAS_RELATION
+          relationType: "EMPLOYED_BY"
+        }
+      ]
+    }
+  ) {
+    name
+    description
+    targetType
+    filter {
+      operator
+      operands {
+        operator
+        relationType
+      }
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
+# STEP 2: Query the lists - membership is computed at query time
+# -----------------------------------------------------------------------------
+
+query GetEmployedPeople {
+  list(name: "EMPLOYED_PEOPLE") {
+    name
+    description
+    definitionUsed {
+      operator
+      relationType
+    }
+    members {
+      id
+      type
+      properties
+      # Can traverse relationships from list members
+      relationships {
+        relationType
+        direction
+        otherNode {
+          id
+          type
+          properties
+        }
+      }
+    }
+  }
+}
+
+query GetUnemployedPeople {
+  list(name: "UNEMPLOYED_PEOPLE") {
+    name
+    description
+    definitionUsed {
+      operator
+      operands {
+        operator
+        relationType
+      }
+    }
+    members {
+      id
+      type
+      properties
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
+# STEP 3: Historical queries - what was the list at a past/future time?
+# -----------------------------------------------------------------------------
+
+# Query what the list contained at a specific point in time
+# Uses: definition active at that time + objects valid at that time
+query GetEmployedPeopleAtDate {
+  list(name: "EMPLOYED_PEOPLE", asOf: "2026-06-01T00:00:00Z") {
+    name
+    members {
+      id
+      properties
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
+# ADVANCED: Filter by properties of the RELATED node (targetFilter)
+# -----------------------------------------------------------------------------
+
+# People employed BY companies where company name contains "Example"
+mutation DefineEmployedAtCompanyNamedExample {
+  defineList(
+    name: "AT_EXAMPLE"
+    description: "People employed by companies with Example in the name"
+    targetType: "PERSON"
+    filter: {
+      operator: HAS_RELATION
+      relationType: "EMPLOYED_BY"
+      targetFilter: {
+        operator: CONTAINS
+        field: "name"
+        value: "Example"
+      }
+    }
+  ) {
+    name
+    filter {
+      operator
+      relationType
+      targetFilter {
+        operator
+        field
+        value
+      }
+    }
+  }
+}
+
+# People NOT employed by any company with "Example" in the name
+mutation DefineNotAtCompanyNamedExample {
+  defineList(
+    name: "NOT_AT_EXAMPLE"
+    description: "People who are not employed by a company with Example in its name"
+    targetType: "PERSON"
+    filter: {
+      operator: NOT
+      operands: [
+        {
+          operator: HAS_RELATION
+          relationType: "EMPLOYED_BY"
+          targetFilter: {
+            operator: CONTAINS
+            field: "name"
+            value: "Example"
+          }
+        }
+      ]
+    }
+  ) {
+    name
+    filter {
+      operator
+      operands {
+        operator
+        relationType
+        targetFilter {
+          operator
+          field
+          value
+        }
+      }
+    }
+  }
+}
+
+query GetNotAtExample {
+  list(name: "NOT_AT_EXAMPLE") {
+    name
+    description
+    members {
+      id
+      properties
+      # Verify they have no EMPLOYED_BY to Example companies
+      relationships {
+        relationType
+        otherNode {
+          type
+          properties
+        }
+      }
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
+# COMBINE: Relationship target filter + node property filter
+# -----------------------------------------------------------------------------
+
+# People employed at Example companies AND with example.com email
+mutation DefineExampleEmployeesWithExampleEmail {
+  defineList(
+    name: "EXAMPLE_EMPLOYEES_EXAMPLE_EMAIL"
+    description: "People employed at Example companies who also have example.com emails"
+    targetType: "PERSON"
+    filter: {
+      operator: AND
+      operands: [
+        {
+          operator: HAS_RELATION
+          relationType: "EMPLOYED_BY"
+          targetFilter: { operator: CONTAINS, field: "name", value: "Example" }
+        }
+        { operator: CONTAINS, field: "email", value: "@example.com" }
+      ]
+    }
+  ) {
+    name
+  }
+}
+

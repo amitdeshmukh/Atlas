@@ -1,0 +1,129 @@
+# Agent Discovery Flow - Ontology-first pattern for exploring and mutating the world model
+#
+# Key principle: The ontology ENFORCES what nodes and edges can exist.
+# - Nodes can only have properties defined in their type
+# - Edges can only use relationTypes defined in the ontology with correct source/target types
+
+# Step 1: Ontology Discovery
+# Agent asks: "What do we know about people and companies?"
+# Returns types with their:
+# - properties (what fields can be set on nodes of this type)
+# - outgoingRelations (what edges can originate FROM this type)
+# - incomingRelations (what edges can point TO this type)
+query DiscoverOntology {
+  searchOntology(query: "people and companies") {
+    types {
+      type {
+        name
+        description
+        # Properties define what fields nodes of this type can have
+        properties {
+          name
+          description
+          dataType
+        }
+        # Relations define what edges can originate from this type
+        outgoingRelations {
+          name
+          description
+          targetType {
+            name
+          }
+        }
+        # Relations that point to this type
+        incomingRelations {
+          name
+          description
+          sourceType {
+            name
+          }
+        }
+      }
+      score
+    }
+    relations {
+      relation {
+        name
+        description
+        sourceType { name }
+        targetType { name }
+      }
+      score
+    }
+  }
+}
+
+# Step 2: Instance Search with Targeted Filter
+# After discovering PERSON has "fullName" property, agent searches:
+query FindPersonByName {
+  nodes(
+    type: "PERSON"
+    filter: { operator: CONTAINS, field: "fullName", value: "Alice" }
+  ) {
+    id
+    type
+    properties
+    # Relationships are validated against ontology - only EMPLOYED_BY can exist for PERSON
+    relationships {
+      relationType
+      direction
+      otherNode {
+        id
+        type
+        properties
+      }
+    }
+  }
+}
+
+# Step 3: Create nodes (validated against ontology)
+# This will FAIL if:
+# - type doesn't exist in ontology
+# - properties aren't defined for the type
+mutation CreateValidPerson {
+  upsertNode(
+    type: "PERSON"
+    properties: {
+      fullName: "Charlie Brown"
+      email: "charlie@example.com"
+    }
+  ) {
+    id
+    type
+    properties
+  }
+}
+
+# This would FAIL - unknownProp is not defined for PERSON:
+# mutation CreateInvalidPerson {
+#   upsertNode(
+#     type: "PERSON"
+#     properties: { fullName: "Test", unknownProp: "xyz" }
+#   ) { id }
+# }
+
+# Step 4: Create edges (validated against ontology)
+# This will FAIL if:
+# - relationType doesn't exist in ontology
+# - source node type doesn't match relation's sourceType
+# - target node type doesn't match relation's targetType
+mutation LinkPersonToCompany {
+  upsertEdgeByNodeRef(
+    relationType: "EMPLOYED_BY"
+    from: { type: "PERSON", key: "email", value: "charlie@example.com" }
+    to: { type: "COMPANY", key: "name", value: "Example Corp" }
+  ) {
+    id
+    relationType
+    validAt
+  }
+}
+
+# This would FAIL - EMPLOYED_BY must go PERSON → COMPANY, not COMPANY → PERSON:
+# mutation InvalidEdgeDirection {
+#   upsertEdge(
+#     relationType: "EMPLOYED_BY"
+#     fromId: "node:company123"  # COMPANY
+#     toId: "node:person456"     # PERSON
+#   ) { id }
+# }

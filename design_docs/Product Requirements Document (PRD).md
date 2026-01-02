@@ -2,7 +2,7 @@
 
 ## GraphQL Ontology, Temporal Graph & Lists Layer
 
-**Backend:** Fastify + GraphQL (Mercurius) + LiteGraph (or compatible Native Graph)
+**Backend:** Fastify + GraphQL + Graph compatible database as storage layer
 **Audience:** Backend / Platform Engineering
 **Status:** Final (v2) – Updated for Universal Traversal & Declarative Lists
 
@@ -19,7 +19,6 @@ It is designed as a **"Shared Brain" for Humans and AI Agents**, enabling:
 * Declarative, dynamic lists (Predicates, not containers)
 * Native temporal modeling (`validAt` / `invalidAt`)
 * **Universal Traversal** ("Blind Walking" for Agents)
-* Fast bootstrapping from a built-in ontology
 
 ### Explicitly Out of Scope
 
@@ -49,11 +48,11 @@ Client (Agent / Service)
        |
        |  GraphQL (Queries + Mutations)
        |
-Fastify + Mercurius Server
+Fastify GraphQL Server
        |
        |  (Resolvers handle Temporality & Logic)
        |
-LiteGraph (Embedded Native Graph)
+Graph Database as storage layer
 
 ```
 
@@ -277,13 +276,12 @@ Hashing allows clients (Agents) to cache the schema safely.
 
 ### Requirements
 
-* Runs at startup.
+* May run at startup but not mandatory
 * Completes in < 100ms.
 * Idempotent (safe to run multiple times).
-* Immutable once applied.
 
-**Purpose:** Ensures the "World" always starts with a valid structure so "Blind Walk" agents don't crash on an empty DB.
-
+**Purpose:** 
+To bootstrap the ontology from a known starting structure. Can be empty if not defined as JSON files.
 ---
 
 ## 16. Performance Targets
