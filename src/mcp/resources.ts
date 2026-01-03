@@ -252,6 +252,16 @@ Use temporal validity windows instead of creating "former_" relationship types.
 
 ## FilterDSL Tips
 
+**IMPORTANT**: Filters must be passed as JSON objects, not strings!
+
+\`\`\`
+// CORRECT - filter as object:
+find_entities("PERSON", filter: { operator: "CONTAINS", field: "FULLNAME", value: "Alice" })
+
+// WRONG - filter as string (will fail validation):
+find_entities("PERSON", filter: "{\\"operator\\": \\"CONTAINS\\", ...}")
+\`\`\`
+
 Filters compose naturally:
 - Use AND/OR/NOT for logic
 - Use HAS_RELATION to filter by connections

@@ -57,7 +57,11 @@ export const SuggestTypeSchema = z.object({
 
 export const FindEntitiesSchema = z.object({
   type: z.string().describe('The type of entities to find (e.g., "PERSON")'),
-  filter: FilterDSLSchema.optional().describe('Optional FilterDSL object to filter results'),
+  filter: FilterDSLSchema.optional().describe(
+    'Optional FilterDSL object to filter results. ' +
+      'IMPORTANT: Pass as a JSON object, NOT a string. ' +
+      'Example: {"operator": "CONTAINS", "field": "NAME", "value": "Alice"}',
+  ),
   limit: z.number().default(100).describe('Maximum number of results (default: 100)'),
 });
 
@@ -125,7 +129,11 @@ export const DefineListSchema = z.object({
   name: z.string().describe('Unique name for the list'),
   description: z.string().min(10).describe('Human-readable description (min 10 chars)'),
   targetType: z.string().describe('The type of entities this list contains'),
-  filter: FilterDSLSchema.describe('FilterDSL defining list membership'),
+  filter: FilterDSLSchema.describe(
+    'FilterDSL object defining list membership. ' +
+      'IMPORTANT: Pass as a JSON object, NOT a string. ' +
+      'Example: {"operator": "HAS_RELATION", "relationType": "EMPLOYED_BY"}',
+  ),
 });
 
 export const GetListMembersSchema = z.object({

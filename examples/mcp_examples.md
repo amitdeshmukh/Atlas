@@ -2,6 +2,16 @@
 
 The AxOntology MCP server provides tools for LLM agents to interact with the world model without writing GraphQL.
 
+> **⚠️ IMPORTANT: JSON Objects vs Strings**
+> 
+> Parameters like `filter` and `properties` must be passed as **JSON objects**, not as strings.
+> 
+> ✅ **Correct:** `"filter": { "operator": "CONTAINS", "field": "NAME", "value": "Alice" }`
+> 
+> ❌ **Wrong:** `"filter": "{\"operator\": \"CONTAINS\", \"field\": \"NAME\", \"value\": \"Alice\"}"`
+> 
+> Do NOT stringify/serialize these parameters - pass them as native JSON objects.
+
 ## Discovery Tools
 
 ### search_concepts

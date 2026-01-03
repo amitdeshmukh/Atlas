@@ -101,7 +101,9 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     name: 'find_entities',
     description:
       'Find entities of a specific type, optionally filtered. ' +
-      'See worldmodel://help/filter-examples for filter syntax.',
+      'The filter parameter must be a JSON object (not a string). ' +
+      'Example filter: {"operator": "CONTAINS", "field": "NAME", "value": "Alice"}. ' +
+      'See worldmodel://help/filter-examples for more syntax.',
     parameters: FindEntitiesSchema,
     execute: async (args) => {
       const result = await worldModel.findEntities(
@@ -271,7 +273,8 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     name: 'define_list',
     description:
       'Define a dynamic list (saved filter). ' +
-      'Lists are predicates, not containers - membership is evaluated at query time.',
+      'Lists are predicates, not containers - membership is evaluated at query time. ' +
+      'The filter parameter must be a JSON object (not a string).',
     parameters: DefineListSchema,
     execute: async (args) => {
       const result = await worldModel.defineList(
