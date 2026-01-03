@@ -154,7 +154,7 @@ Create a new entity in the world model.
 ```
 
 ### link_entities
-Create a relationship between two entities.
+Create a relationship between two entities. Supports temporal validity windows for historical data.
 
 ```json
 {
@@ -164,6 +164,56 @@ Create a relationship between two entities.
     "relationType": "EMPLOYED_BY",
     "toId": "node:techcorp456"
   }
+}
+```
+
+**With historical dates (e.g., recording past employment):**
+```json
+{
+  "tool": "link_entities",
+  "arguments": {
+    "fromId": "node:luca123",
+    "relationType": "EMPLOYED_BY",
+    "toId": "node:apple456",
+    "properties": { "title": "CFO" },
+    "validAt": "2014-05-01T00:00:00Z",
+    "invalidAt": "2024-12-31T00:00:00Z"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "EMPLOYED_BY:abc123",
+  "relationType": "EMPLOYED_BY",
+  "fromId": "node:luca123",
+  "toId": "node:apple456",
+  "properties": { "title": "CFO" },
+  "validAt": "2014-05-01T00:00:00Z",
+  "invalidAt": "2024-12-31T00:00:00Z"
+}
+```
+
+### invalidate_record
+End the validity of an entity or relationship. Use this to record when something stopped being true (e.g., person left company). Supports historical dates for backdating.
+
+```json
+{
+  "tool": "invalidate_record",
+  "arguments": {
+    "id": "EMPLOYED_BY:abc123",
+    "invalidAt": "2024-12-31T00:00:00Z"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "id": "EMPLOYED_BY:abc123",
+  "invalidAt": "2024-12-31T00:00:00Z"
 }
 ```
 
@@ -259,4 +309,42 @@ If Alice doesn't exist:
 3b. create_entity(type: "PERSON", properties: { fullName: "Alice Smith", email: "alice@example.com" })
     → Creates Alice and returns her node ID
 ```
+
+## Historical Data Example
+
+Agent task: "Record that Luca Maestri was CFO of Apple from May 2014 to December 2024"
+
+```
+1. search_concepts(query: "person employee company executive")
+   → Discovers PERSON, COMPANY types and EMPLOYED_BY relation
+
+2. create_entity(type: "PERSON", properties: { fullName: "Luca Maestri", email: "luca@apple.com" })
+   → Creates Luca's record (entity created "now" but represents a real person)
+
+3. find_entities(type: "COMPANY", filter: { operator: CONTAINS, field: "name", value: "Apple" })
+   → Finds Apple's node ID
+
+4. link_entities(
+     fromId: "node:luca123",
+     relationType: "EMPLOYED_BY",
+     toId: "node:apple456",
+     properties: { title: "CFO" },
+     validAt: "2014-05-01T00:00:00Z",
+     invalidAt: "2024-12-31T00:00:00Z"
+   )
+   → Creates a bounded historical relationship
+```
+
+The key insight: **Entity creation timestamps** represent when you added something to the knowledge graph. **Relationship validity windows** represent when the relationship was true in the real world. These are independent—you can backdate relationships to any point in time.
+
+### Ending an existing relationship
+
+If the relationship already exists and you need to end it:
+
+```
+invalidate_record(id: "EMPLOYED_BY:abc123", invalidAt: "2024-12-31T00:00:00Z")
+→ Sets the end date without deleting the record
+```
+
+This preserves the full history: the relationship remains queryable for historical analysis (e.g., "Who was CFO in 2020?") but won't appear in current-time queries.
 
