@@ -35,6 +35,5 @@ export function createMCPServer(options: MCPServerOptions): FastMCP {
  */
 export function startMCPServer(server: FastMCP): void {
   server.start({ transportType: 'stdio' });
-  console.error('[MCP] Server started');
 }
 

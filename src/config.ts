@@ -1,6 +1,11 @@
 import path from 'node:path';
 import dotenv from 'dotenv';
-dotenv.config();
+
+// Only load .env file if not running as MCP server
+// MCP servers should receive env vars from Claude Desktop config
+if (!process.env.MCP_MODE) {
+  dotenv.config({ debug: false });
+}
 
 export interface SurrealConfig {
   url: string;
