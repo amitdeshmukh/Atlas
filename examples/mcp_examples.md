@@ -585,3 +585,88 @@ Agent task: "Track products manufactured by companies"
 
 Now agents can traverse: "Find all products made by companies that employ Alice"
 
+## Common Patterns & Gotchas
+
+### Pattern 1: Indirect Relationships (Graph Traversal)
+
+**Problem**: Agent only checks direct relationships and misses indirect connections.
+
+**Scenario**: "Was Luca involved in the iPhone 17 launch?"
+
+❌ **Wrong approach** - only checking direct relationships:
+```
+get_relationships("node:luca")  
+→ No direct MANUFACTURES relationship to iPhone 17
+→ Agent concludes: "No connection found"
+```
+
+✅ **Correct approach** - traverse the graph:
+```
+1. get_relationships("node:luca")
+   → Finds: Luca --EMPLOYED_BY--> Apple (invalidAt: 2024-12-31)
+
+2. get_relationships("node:apple", direction: "OUTGOING")
+   → Finds: Apple --MANUFACTURES--> iPhone 17e (validAt: 2025-09-01)
+
+3. Compare temporal data:
+   → Luca left Apple (2024) BEFORE iPhone 17e was created (2025)
+   → Conclusion: Luca was NOT involved in iPhone 17 launch
+```
+
+Or use `find_path` directly:
+```
+find_path(fromId: "node:luca", toId: "node:iphone17e", maxDepth: 3)
+→ Returns: Luca --EMPLOYED_BY--> Apple --MANUFACTURES--> iPhone 17e
+→ Then check temporal validity on each edge
+```
+
+### Pattern 2: Temporal Reasoning
+
+**Problem**: Agent ignores validAt/invalidAt timestamps on relationships.
+
+**Key insight**: Relationships have time bounds!
+- `validAt`: When the relationship became true
+- `invalidAt`: When the relationship ended (null = still active)
+
+**Example**: "Who was CFO of Apple in 2020?"
+```
+1. find_entities("COMPANY", filter: {"operator": "CONTAINS", "field": "NAME", "value": "Apple"})
+2. get_relationships("node:apple", direction: "INCOMING")
+3. Filter results where:
+   - relationType = "EMPLOYED_BY" 
+   - properties.title = "CFO"
+   - validAt <= "2020-06-01" AND (invalidAt IS NULL OR invalidAt > "2020-06-01")
+```
+
+### Pattern 3: Schema Discovery Before Querying
+
+**Problem**: Agent queries blindly without understanding the ontology.
+
+✅ **Best practice** - always start with discovery:
+```
+1. get_ontology_summary()           → See what exists
+2. search_concepts("your topic")    → Find relevant types/relations
+3. get_type_info("TYPE_NAME")       → See properties and relations
+4. find_ontology_paths("A", "B")    → Understand how types connect
+5. THEN query with find_entities()
+```
+
+### Pattern 4: Finding Connections Between Any Two Entities
+
+**Use `find_path`** when you need to know HOW two entities are connected:
+
+```
+find_path(fromId: "node:alice", toId: "node:techcorp", maxDepth: 4)
+```
+
+This returns ALL paths connecting them, showing the relationship chain.
+
+### Anti-Pattern: Assuming No Relationship Means No Connection
+
+**Wrong**: "get_relationships returned nothing relevant, so there's no connection"
+
+**Right**: Always consider:
+1. Indirect paths through intermediate entities
+2. The ontology structure (`find_ontology_paths` shows possible routes)
+3. Temporal validity of relationships
+

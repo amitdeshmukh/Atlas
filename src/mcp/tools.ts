@@ -128,7 +128,10 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
 
   server.addTool({
     name: 'get_relationships',
-    description: "Get all relationships for an entity. Returns the entity's connections.",
+    description:
+      'Get DIRECT relationships for an entity (one hop only). ' +
+      'For indirect connections through multiple entities, use find_path instead. ' +
+      'Returns edges with temporal data (validAt/invalidAt) for historical analysis.',
     parameters: GetRelationshipsSchema,
     execute: async (args) => {
       const result = await worldModel.getRelationships(args.entityId, args.direction);
@@ -140,7 +143,9 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     name: 'find_path',
     description:
       'Find how two entities are connected through the graph. ' +
-      'Useful for questions like "How is Alice connected to Bob?"',
+      'IMPORTANT: Use this to discover indirect relationships! ' +
+      'Direct relationships may not exist, but entities can be connected through intermediate nodes. ' +
+      'Example: Person→Company→Product. Check temporal data on returned edges for historical accuracy.',
     parameters: FindPathSchema,
     execute: async (args) => {
       const result = await worldModel.findInstancePaths(

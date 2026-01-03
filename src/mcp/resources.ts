@@ -295,20 +295,45 @@ get_list_definition("TECH_EMPLOYEES")  // See the filter criteria
 
 ## Best Practices for Agents
 
-### Use This as Your Knowledge Base
-- Store information you learn about entities and their relationships
-- Query before creating to avoid duplicates (use find_entities first)
-- Build upon existing structures rather than creating parallel ones
+### Think in Graphs, Not Tables
+- Entities are connected through relationships - **traverse the graph**
+- Use \`find_path(fromId, toId)\` to discover how any two entities connect
+- Use \`get_relationships\` to explore an entity's connections
+- **Don't assume no direct relationship means no connection** - check indirect paths!
+
+Example: "Is Alice connected to TechCorp?"
+\`\`\`
+// Don't just check: get_relationships("node:alice") for direct EMPLOYED_BY
+// Do this: find_path("node:alice", "node:techcorp", maxDepth: 4)
+// This finds: Alice -> Company1 -> Partner -> TechCorp
+\`\`\`
+
+### Think Temporally
+- Relationships have \`validAt\` and \`invalidAt\` timestamps
+- Check these to understand WHEN relationships were true
+- "Was X involved in Y?" requires checking if their connection existed at the right time
+
+Example: "Was Luca involved in iPhone 17 launch?"
+\`\`\`
+1. find_path("node:luca", "node:iphone17")  // Find the connection
+2. Check each edge's temporal data:
+   - Luca --EMPLOYED_BY--> Apple (invalidAt: 2024-12-31)
+   - Apple --MANUFACTURES--> iPhone 17 (validAt: 2025-09-01)
+3. Luca left BEFORE iPhone 17 was created = NOT involved
+\`\`\`
 
 ### Semantic Discovery First
 - Always start with \`search_concepts\` to discover existing types and relations
+- Use \`get_ontology_summary\` to understand the scope
+- Use \`find_ontology_paths\` to see how types CAN connect before querying instances
 - Use \`suggest_type\` when unsure which entity type to use
-- Respect the existing ontology and extend it thoughtfully
 
-### Think Temporally
-- Use \`validAt\` and \`invalidAt\` for historical accuracy
-- Don't create "former_X" relationships - use temporal validity instead
-- Query with \`asOf\` parameters to understand state at specific times
+### Query Strategy
+1. \`get_ontology_summary()\` - What exists?
+2. \`search_concepts("topic")\` - Find relevant types/relations
+3. \`find_ontology_paths("A", "B")\` - How can these types connect?
+4. \`find_entities()\` - Find specific instances
+5. \`find_path()\` - Trace connections between instances
 
 ### Prefer Lists Over Hardcoded Sets
 - Define dynamic lists with filters rather than maintaining static ID collections
