@@ -1,6 +1,7 @@
 /**
  * Timeline Component
  * Handles temporal navigation and time slider
+ * Uses Flatpickr for date/time selection
  */
 
 export class Timeline {
@@ -13,6 +14,7 @@ export class Timeline {
     this.minTime = null;
     this.maxTime = null;
     this.currentTime = new Date();
+    this.flatpickrInstance = null;
 
     this.onTimeChangeCallback = null;
 
@@ -23,6 +25,9 @@ export class Timeline {
     // Set initial state to "live" (current time)
     this.setToLive();
 
+    // Initialize Flatpickr
+    this.initFlatpickr();
+
     // Slider change handler
     this.slider.addEventListener('input', () => {
       this.handleSliderChange();
@@ -32,10 +37,32 @@ export class Timeline {
     this.liveBtn.addEventListener('click', () => {
       this.setToLive();
     });
+  }
 
-    // Custom time input handler
-    this.customTimeInput.addEventListener('change', () => {
-      this.handleCustomTimeChange();
+  initFlatpickr() {
+    // Check if flatpickr is available
+    if (typeof flatpickr === 'undefined') {
+      console.warn('Flatpickr not loaded, falling back to native input');
+      this.customTimeInput.type = 'datetime-local';
+      this.customTimeInput.addEventListener('change', () => {
+        this.handleCustomTimeChange();
+      });
+      return;
+    }
+
+    this.flatpickrInstance = flatpickr(this.customTimeInput, {
+      enableTime: true,
+      dateFormat: 'Y-m-d H:i',
+      time_24hr: true,
+      defaultDate: this.currentTime,
+      theme: 'dark',
+      allowInput: true,
+      clickOpens: true,
+      onChange: (selectedDates) => {
+        if (selectedDates.length > 0) {
+          this.handleFlatpickrChange(selectedDates[0]);
+        }
+      },
     });
   }
 
@@ -84,7 +111,27 @@ export class Timeline {
   }
 
   /**
-   * Handle custom time input change
+   * Handle Flatpickr date selection
+   */
+  handleFlatpickrChange(selectedDate) {
+    if (!selectedDate) return;
+
+    this.currentTime = selectedDate;
+
+    // Update slider position
+    if (this.minTime && this.maxTime) {
+      const timeRange = this.maxTime.getTime() - this.minTime.getTime();
+      const offset = this.currentTime.getTime() - this.minTime.getTime();
+      const position = Math.max(0, Math.min(100, (offset / timeRange) * 100));
+      this.slider.value = position;
+    }
+
+    this.updateDisplayText();
+    this.emitTimeChange();
+  }
+
+  /**
+   * Handle native datetime-local input change (fallback)
    */
   handleCustomTimeChange() {
     const customValue = this.customTimeInput.value;
@@ -121,12 +168,22 @@ export class Timeline {
    * Update the display with current time
    */
   updateDisplay() {
-    const timeString = this.currentTime.toISOString();
-    this.currentTimeDisplay.textContent = this.formatTimestamp(this.currentTime);
+    this.updateDisplayText();
 
-    // Update custom time input
-    const localTime = new Date(this.currentTime.getTime() - this.currentTime.getTimezoneOffset() * 60000);
-    this.customTimeInput.value = localTime.toISOString().slice(0, 16);
+    // Update Flatpickr or native input
+    if (this.flatpickrInstance) {
+      this.flatpickrInstance.setDate(this.currentTime, false); // false = don't trigger onChange
+    } else {
+      const localTime = new Date(this.currentTime.getTime() - this.currentTime.getTimezoneOffset() * 60000);
+      this.customTimeInput.value = localTime.toISOString().slice(0, 16);
+    }
+  }
+
+  /**
+   * Update just the text display (without updating the input)
+   */
+  updateDisplayText() {
+    this.currentTimeDisplay.textContent = this.formatTimestamp(this.currentTime);
   }
 
   /**

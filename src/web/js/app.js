@@ -273,10 +273,21 @@ class VisualizerApp {
       this.ui.showLoading('Loading instance data...');
 
       const asOf = this.currentAsOf;
+      console.log('[AxOntology] Loading instances with asOf:', asOf);
+      
       const nodes = await this.client.fetchAllInstances(asOf, 100);
 
       if (!nodes || nodes.length === 0) {
-        this.ui.showError('No instance data found. Create some entities using the GraphQL API or MCP server.');
+        if (asOf) {
+          const selectedDate = new Date(asOf);
+          this.ui.showError(
+            `No entities existed at ${selectedDate.toLocaleString()}. ` +
+            `Entities are only visible when validAt ≤ selected time. ` +
+            `Click "LIVE" to see current data.`
+          );
+        } else {
+          this.ui.showError('No instance data found. Create some entities using the GraphQL API or MCP server.');
+        }
         return;
       }
 
