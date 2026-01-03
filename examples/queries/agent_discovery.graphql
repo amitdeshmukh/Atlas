@@ -1,0 +1,239 @@
+# Agent Discovery Queries
+# These queries help LLM agents navigate an infinite ontology and world model
+
+# ===================================================================
+# 1. SUGGEST TYPE - "What type should I use for this entity?"
+# ===================================================================
+# Agent describes what they want to create, system suggests best matching types
+# Uses semantic search over type descriptions
+
+query SuggestTypeForEmployee {
+  suggestType(description: "someone who works for a company") {
+    type {
+      name
+      description
+    }
+    confidence
+    reason
+    availableProperties {
+      name
+      description
+      dataType
+    }
+  }
+}
+
+query SuggestTypeForBusiness {
+  suggestType(description: "an organization that employs people and makes products") {
+    type {
+      name
+      description
+    }
+    confidence
+    reason
+    availableProperties {
+      name
+    }
+  }
+}
+
+# ===================================================================
+# 2. FIND ONTOLOGY PATH - "How is X connected to Y?"
+# ===================================================================
+# Agent wants to understand how two types relate in the ontology graph
+# Returns relationship paths, not instances
+
+query HowIsPersonConnectedToCompany {
+  findOntologyPath(fromType: "PERSON", toType: "COMPANY") {
+    pathDescription    # e.g., "PERSON -->[EMPLOYED_BY]--> COMPANY"
+    depth              # number of hops
+    steps {
+      relation {
+        name
+        description
+      }
+      direction        # OUTGOING or INCOMING
+      targetType {
+        name
+      }
+    }
+  }
+}
+
+# With max depth limit for complex ontologies
+query FindIndirectPaths {
+  findOntologyPath(fromType: "PERSON", toType: "PRODUCT", maxDepth: 4) {
+    pathDescription
+    depth
+    steps {
+      relation { name }
+      direction
+      targetType { name }
+    }
+  }
+}
+
+# ===================================================================
+# 3. SEARCH RELATIONSHIPS - "What connections match this meaning?"
+# ===================================================================
+# Agent has a specific node and wants to find relevant relationships
+# Uses semantic search over relationship context
+
+query FindTechRelatedConnections {
+  # Given a person's ID, find their connections related to "technology"
+  searchRelationships(
+    nodeId: "node:abc123"
+    query: "technology software engineering"
+    limit: 5
+  ) {
+    edge {
+      relationType
+      direction
+      otherNode {
+        type
+        properties
+      }
+    }
+    score
+    matchReason
+  }
+}
+
+query FindEmploymentConnections {
+  # Find connections related to work/employment
+  searchRelationships(
+    nodeId: "node:abc123"
+    query: "employer company workplace job"
+  ) {
+    edge {
+      relationType
+      direction
+      otherNode {
+        type
+        properties
+      }
+    }
+    score
+    matchReason
+  }
+}
+
+# ===================================================================
+# COMPLETE AGENT WORKFLOW EXAMPLE
+# ===================================================================
+
+# Step 1: Agent receives task "Record that Alice joined TechCorp"
+# First, discover relevant types by meaning:
+query Step1_DiscoverRelevantTypes {
+  searchOntology(query: "person employee company job") {
+    types {
+      type { name description }
+      score
+    }
+    relations {
+      relation { 
+        name 
+        description 
+        sourceType { name }
+        targetType { name }
+      }
+      score
+    }
+  }
+}
+
+# Step 2: Understand what properties PERSON type accepts:
+query Step2_UnderstandPersonType {
+  type(name: "PERSON") {
+    name
+    description
+    properties {
+      name
+      description
+      dataType
+    }
+    outgoingRelations {
+      name
+      description
+      targetType { name }
+    }
+  }
+}
+
+# Step 3: Find or create Alice (targeted search, not dump):
+query Step3_FindAlice {
+  nodes(
+    type: "PERSON"
+    filter: { operator: CONTAINS, field: "fullName", value: "Alice" }
+    limit: 10
+  ) {
+    id
+    properties
+  }
+}
+
+# Step 4: Find TechCorp:
+query Step4_FindTechCorp {
+  nodes(
+    type: "COMPANY"
+    filter: { operator: CONTAINS, field: "name", value: "TechCorp" }
+    limit: 10
+  ) {
+    id
+    properties
+  }
+}
+
+# Step 5: Create the employment relationship (mutation):
+mutation Step5_CreateEmployment {
+  upsertEdgeByNodeRef(
+    relationType: "EMPLOYED_BY"
+    from: { type: "PERSON", key: "fullName", value: "Alice" }
+    to: { type: "COMPANY", key: "name", value: "TechCorp" }
+  ) {
+    id
+    fromNode { id type properties }
+    toNode { id type properties }
+  }
+}
+
+# ===================================================================
+# 4. FIND INSTANCE PATH - "How is Alice connected to Bob?"
+# ===================================================================
+# Agent wants to find paths between specific node instances.
+# Uses iterative BFS with DB queries at each level for scalability.
+
+query HowIsAliceConnectedToBob {
+  findInstancePath(
+    fromNodeId: "node:alice123"
+    toNodeId: "node:bob456"
+    maxDepth: 3
+  ) {
+    pathDescription
+    depth
+    edges {
+      id
+      relationType
+      fromNode { id type properties }
+      toNode { id type properties }
+    }
+  }
+}
+
+# Example: Find connection between two people through shared company
+query FindConnectionThroughCompany {
+  findInstancePath(
+    fromNodeId: "node:person1"
+    toNodeId: "node:person2"
+    maxDepth: 2  # P1 -> Company -> P2 = 2 hops
+  ) {
+    pathDescription
+    depth
+    edges {
+      relationType
+      fromNode { type properties }
+      toNode { type properties }
+    }
+  }
+}
+

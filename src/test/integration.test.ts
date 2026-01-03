@@ -1090,5 +1090,308 @@ describe('Integration Tests', () => {
       expect(personHit).toBeDefined();
     });
   });
+
+  describe('Agent Discovery Queries', () => {
+    it('should find ontology paths between types', async () => {
+      const result = await graphqlQuery<{
+        findOntologyPath: Array<{
+          pathDescription: string;
+          depth: number;
+          steps: Array<{
+            relation: { name: string };
+            direction: string;
+            targetType: { name: string };
+          }>;
+        }>;
+      }>(
+        ctx.app,
+        `
+        query {
+          findOntologyPath(fromType: "PERSON", toType: "COMPANY") {
+            pathDescription
+            depth
+            steps {
+              relation { name }
+              direction
+              targetType { name }
+            }
+          }
+        }
+        `,
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.findOntologyPath).toBeDefined();
+      expect(result.data!.findOntologyPath.length).toBeGreaterThan(0);
+      
+      // Should find PERSON --EMPLOYED_BY--> COMPANY path
+      const directPath = result.data!.findOntologyPath.find(
+        (p) => p.depth === 1 && p.steps[0]?.relation?.name === 'EMPLOYED_BY',
+      );
+      expect(directPath).toBeDefined();
+      expect(directPath!.steps[0].targetType.name).toBe('COMPANY');
+    });
+
+    it('should return empty array when no path exists', async () => {
+      // First create an isolated type with no relations
+      await graphqlQuery(
+        ctx.app,
+        `
+        mutation {
+          upsertType(
+            name: "ISOLATED_TYPE"
+            description: "A type with no relations to other types for testing"
+          ) { name }
+        }
+        `,
+      );
+
+      const result = await graphqlQuery<{
+        findOntologyPath: Array<{ pathDescription: string }>;
+      }>(
+        ctx.app,
+        `
+        query {
+          findOntologyPath(fromType: "PERSON", toType: "ISOLATED_TYPE") {
+            pathDescription
+          }
+        }
+        `,
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.findOntologyPath).toEqual([]);
+    });
+
+    it('should suggest types based on semantic description', async () => {
+      const result = await graphqlQuery<{
+        suggestType: Array<{
+          type: { name: string; description: string };
+          confidence: number;
+          reason: string;
+          availableProperties: Array<{ name: string }>;
+        }>;
+      }>(
+        ctx.app,
+        `
+        query {
+          suggestType(description: "someone who works for a business") {
+            type {
+              name
+              description
+            }
+            confidence
+            reason
+            availableProperties {
+              name
+            }
+          }
+        }
+        `,
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.suggestType).toBeDefined();
+      expect(result.data!.suggestType.length).toBeGreaterThan(0);
+      
+      // PERSON should be a top suggestion for "someone who works"
+      const types = result.data!.suggestType.map((s) => s.type.name);
+      expect(types).toContain('PERSON');
+    });
+
+    it('should search relationships by semantic meaning', async () => {
+      // First create nodes and edges
+      const createResult = await graphqlQuery<{
+        person: { id: string };
+        company: { id: string };
+      }>(
+        ctx.app,
+        `
+        mutation {
+          person: upsertNode(
+            type: "PERSON"
+            properties: { fullName: "Tech Worker", email: "tech@example.com" }
+          ) { id }
+          company: upsertNode(
+            type: "COMPANY"
+            properties: { name: "TechCorp Inc", revenue: "1000000" }
+          ) { id }
+        }
+        `,
+      );
+
+      expect(createResult.errors).toBeUndefined();
+      const personId = createResult.data!.person.id;
+      const companyId = createResult.data!.company.id;
+
+      // Create employment relationship
+      await graphqlQuery(
+        ctx.app,
+        `
+        mutation CreateEdge($fromId: ID!, $toId: ID!) {
+          upsertEdge(
+            relationType: "EMPLOYED_BY"
+            fromId: $fromId
+            toId: $toId
+          ) { id }
+        }
+        `,
+        { fromId: personId, toId: companyId },
+      );
+
+      // Now search relationships for this person by meaning
+      const searchResult = await graphqlQuery<{
+        searchRelationships: Array<{
+          edge: {
+            relationType: string;
+            direction: string;
+            otherNode: { type: string; properties: any };
+          };
+          score: number;
+          matchReason: string;
+        }>;
+      }>(
+        ctx.app,
+        `
+        query SearchRels($nodeId: ID!) {
+          searchRelationships(nodeId: $nodeId, query: "employer company work") {
+            edge {
+              relationType
+              direction
+              otherNode {
+                type
+                properties
+              }
+            }
+            score
+            matchReason
+          }
+        }
+        `,
+        { nodeId: personId },
+      );
+
+      expect(searchResult.errors).toBeUndefined();
+      expect(searchResult.data?.searchRelationships).toBeDefined();
+      expect(searchResult.data!.searchRelationships.length).toBeGreaterThan(0);
+      
+      // The employment relationship should be found
+      const employmentHit = searchResult.data!.searchRelationships.find(
+        (r) => r.edge.relationType === 'EMPLOYED_BY',
+      );
+      expect(employmentHit).toBeDefined();
+      expect(employmentHit!.edge.direction).toBe('OUTGOING');
+    });
+
+    it('should handle same-type path query', async () => {
+      const result = await graphqlQuery<{
+        findOntologyPath: Array<{
+          pathDescription: string;
+          depth: number;
+        }>;
+      }>(
+        ctx.app,
+        `
+        query {
+          findOntologyPath(fromType: "PERSON", toType: "PERSON") {
+            pathDescription
+            depth
+          }
+        }
+        `,
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.findOntologyPath).toBeDefined();
+      // Same type should return a 0-depth path
+      const samePath = result.data!.findOntologyPath.find((p) => p.depth === 0);
+      expect(samePath).toBeDefined();
+      expect(samePath!.pathDescription).toContain('same type');
+    });
+
+    it('should find paths between node instances', async () => {
+      // Create a chain: Person1 -> Company -> Person2 (via EMPLOYED_BY)
+      const setup = await graphqlQuery<{
+        person1: { id: string };
+        person2: { id: string };
+        company: { id: string };
+      }>(
+        ctx.app,
+        `
+        mutation {
+          person1: upsertNode(
+            type: "PERSON"
+            properties: { fullName: "Path Finder 1", email: "path1@example.com" }
+          ) { id }
+          person2: upsertNode(
+            type: "PERSON"
+            properties: { fullName: "Path Finder 2", email: "path2@example.com" }
+          ) { id }
+          company: upsertNode(
+            type: "COMPANY"
+            properties: { name: "Path Corp", revenue: "500000" }
+          ) { id }
+        }
+        `,
+      );
+
+      expect(setup.errors).toBeUndefined();
+      const p1 = setup.data!.person1.id;
+      const p2 = setup.data!.person2.id;
+      const c = setup.data!.company.id;
+
+      // Create edges: P1 -> Company, P2 -> Company
+      await graphqlQuery(
+        ctx.app,
+        `
+        mutation CreateEdges($p1: ID!, $p2: ID!, $c: ID!) {
+          e1: upsertEdge(relationType: "EMPLOYED_BY", fromId: $p1, toId: $c) { id }
+          e2: upsertEdge(relationType: "EMPLOYED_BY", fromId: $p2, toId: $c) { id }
+        }
+        `,
+        { p1, p2, c },
+      );
+
+      // Find path from P1 to P2 (should go through Company)
+      const pathResult = await graphqlQuery<{
+        findInstancePath: Array<{
+          pathDescription: string;
+          depth: number;
+          edges: Array<{
+            relationType: string;
+            fromNode: { id: string; type: string };
+            toNode: { id: string; type: string };
+          }>;
+        }>;
+      }>(
+        ctx.app,
+        `
+        query FindPath($from: ID!, $to: ID!) {
+          findInstancePath(fromNodeId: $from, toNodeId: $to, maxDepth: 3) {
+            pathDescription
+            depth
+            edges {
+              relationType
+              fromNode { id type }
+              toNode { id type }
+            }
+          }
+        }
+        `,
+        { from: p1, to: p2 },
+      );
+
+      expect(pathResult.errors).toBeUndefined();
+      expect(pathResult.data?.findInstancePath).toBeDefined();
+      
+      // Should find a 2-hop path: P1 -> Company -> P2
+      const paths = pathResult.data!.findInstancePath;
+      expect(paths.length).toBeGreaterThan(0);
+      
+      const twoHopPath = paths.find((p) => p.depth === 2);
+      expect(twoHopPath).toBeDefined();
+      expect(twoHopPath!.edges.length).toBe(2);
+    });
+  });
 });
 

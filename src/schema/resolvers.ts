@@ -15,9 +15,14 @@ import {
   searchOntology,
   upsertRelationTypeDef,
   upsertTypeDef,
+  findPathsBetweenTypes,
+  findPathsBetweenNodes,
   type TypeDef,
   type RelationTypeDef,
+  type OntologyPath,
+  type InstancePath,
 } from '../ontology/surrealOntology.js';
+import { embedText, cosineSimilarity } from '../embeddings/embeddingService.js';
 
 type ResolverContext = MercuriusContext & {
   asOf: string;
@@ -165,6 +170,117 @@ export function buildResolvers(graphDb: GraphDbAdapter) {
           members: filteredMembers.map(toGenericNode),
         };
       },
+
+      async findOntologyPath(
+        _root: unknown,
+        args: { fromType: string; toType: string; maxDepth?: number },
+      ) {
+        const paths = await findPathsBetweenTypes(
+          args.fromType,
+          args.toType,
+          args.maxDepth ?? 3,
+        );
+        // Transform to GraphQL format
+        return paths.map((path) => ({
+          pathDescription: path.pathDescription,
+          depth: path.depth,
+          steps: path.steps.map((step) => ({
+            relation: step.relation,
+            direction: step.direction,
+            targetTypeName: step.targetType,
+          })),
+        }));
+      },
+
+      async suggestType(
+        _root: unknown,
+        args: { description: string; limit?: number },
+      ) {
+        const limit = args.limit ?? 3;
+        // Use searchOntology which does semantic search on descriptions
+        const results = await searchOntology(args.description, limit);
+        
+        // Transform type hits into suggestions
+        return results.types.map((hit) => ({
+          type: hit.type,
+          confidence: hit.score,
+          reason: hit.matchReason ?? hit.type.description,
+        }));
+      },
+
+      async searchRelationships(
+        _root: unknown,
+        args: { nodeId: string; query: string; asOf?: string; limit?: number },
+        ctx: ResolverContext,
+      ) {
+        const asOf = args.asOf ?? ctx.asOf;
+        const limit = args.limit ?? 10;
+        
+        // Get all edges for this node
+        const edges = await ctx.graphDb.getEdgesForNode(args.nodeId, 'BOTH', asOf);
+        if (edges.length === 0) return [];
+
+        // Get the query embedding
+        const queryEmbedding = await embedText(args.query);
+
+        // Score each edge by semantic similarity
+        const scoredEdges = await Promise.all(
+          edges.map(async (edge) => {
+            // Get the other node to include in similarity calculation
+            const isOutgoing = edge.fromId === args.nodeId;
+            const otherNodeId = isOutgoing ? edge.toId : edge.fromId;
+            const otherNode = await ctx.graphDb.getNodeById(otherNodeId, asOf);
+            
+            // Build text representation of the relationship for embedding
+            const otherNodeDesc = otherNode
+              ? `${otherNode.type}: ${JSON.stringify(otherNode.properties)}`
+              : '';
+            const edgeText = `${edge.relationType} ${otherNodeDesc}`;
+            
+            const edgeEmbedding = await embedText(edgeText);
+            const score = cosineSimilarity(queryEmbedding, edgeEmbedding);
+
+            return {
+              edge: {
+                id: edge.id,
+                relationType: edge.relationType,
+                direction: isOutgoing ? 'OUTGOING' : 'INCOMING',
+                otherNodeId,
+                validAt: edge.validAt,
+                invalidAt: edge.invalidAt,
+              },
+              score,
+              matchReason: edgeText,
+            };
+          }),
+        );
+
+        // Sort by score and limit
+        scoredEdges.sort((a, b) => b.score - a.score);
+        return scoredEdges.slice(0, limit);
+      },
+
+      async findInstancePath(
+        _root: unknown,
+        args: { fromNodeId: string; toNodeId: string; maxDepth?: number },
+      ) {
+        const paths = await findPathsBetweenNodes(
+          args.fromNodeId,
+          args.toNodeId,
+          args.maxDepth ?? 3,
+        );
+        // Transform to GraphQL format - edges will be resolved by InstancePathEdge resolver
+        return paths.map((path) => ({
+          pathDescription: path.pathDescription,
+          depth: path.depth,
+          edges: path.edges.map((e) => ({
+            id: e.id,
+            relationType: e.relationType,
+            fromId: e.fromId,
+            toId: e.toId,
+          })),
+        }));
+      },
     },
 
     NodeType: {
@@ -185,6 +301,44 @@ export function buildResolvers(graphDb: GraphDbAdapter) {
       },
       async targetType(root: { targetType: string }) {
         return getTypeByName(root.targetType);
+      },
+    },
+
+    OntologyPathStep: {
+      async targetType(root: { targetTypeName: string }) {
+        return getTypeByName(root.targetTypeName);
+      },
+    },
+
+    TypeSuggestion: {
+      async availableProperties(root: { type: { name: string } }) {
+        return getPropertiesForType(root.type.name);
+      },
+    },
+
+    RelationshipSearchHit: {
+      edge(root: any) {
+        // Pass through the edge object for GraphEdge resolver
+        return root.edge;
+      },
+    },
+
+    InstancePathEdge: {
+      async fromNode(
+        root: { fromId: string },
+        _args: unknown,
+        ctx: ResolverContext,
+      ) {
+        const node = await ctx.graphDb.getNodeById(root.fromId, ctx.asOf);
+        return node ? toGenericNode(node) : null;
+      },
+      async toNode(
+        root: { toId: string },
+        _args: unknown,
+        ctx: ResolverContext,
+      ) {
+        const node = await ctx.graphDb.getNodeById(root.toId, ctx.asOf);
+        return node ? toGenericNode(node) : null;
       },
     },
 

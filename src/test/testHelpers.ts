@@ -39,6 +39,22 @@ function fromEdgeRecord(rec: any): StoredEdge {
   };
 }
 
+/**
+ * Convert a RELATE edge record to StoredEdge.
+ * RELATE edges have `in` (source) and `out` (target) fields.
+ */
+function fromRelateEdgeRecord(rec: any, relationType: string): StoredEdge {
+  return {
+    id: String(rec.id),
+    relationType,
+    fromId: String(rec.fromId ?? rec.in),
+    toId: String(rec.toId ?? rec.out),
+    properties: rec.properties ?? {},
+    validAt: rec.validAt,
+    invalidAt: rec.invalidAt ?? null,
+  };
+}
+
 function createTestAdapter(db: Surreal): GraphDbAdapter {
   return {
     async getNodeById(id, asOf) {
@@ -109,62 +125,98 @@ function createTestAdapter(db: Surreal): GraphDbAdapter {
     },
 
     async getEdgesForNode(nodeId, direction, asOf) {
-      let query: string;
-      if (direction === 'OUTGOING') {
-        query = `
-          SELECT * FROM edge
-          WHERE fromId = $nodeId
-            AND validAt <= $asOf
-            AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
-        `;
-      } else if (direction === 'INCOMING') {
-        query = `
-          SELECT * FROM edge
-          WHERE toId = $nodeId
-            AND validAt <= $asOf
-            AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
-        `;
-      } else {
-        query = `
-          SELECT * FROM edge
-          WHERE (fromId = $nodeId OR toId = $nodeId)
-            AND validAt <= $asOf
-            AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
-        `;
+      // With RELATE, each relationType is its own edge table.
+      // Query all relation types from the ontology.
+      const [relTypes] = (await db.query(
+        /* surrealql */ `SELECT name FROM relationTypeDef;`,
+      )) as any[];
+      
+      const relationTypeNames: string[] = (relTypes ?? []).map((r: any) => r.name);
+      
+      if (relationTypeNames.length === 0) {
+        return [];
       }
-      const [rows] = (await db.query(query, {
-        nodeId,
-        asOf,
-      })) as any[];
-      return (rows ?? []).map(fromEdgeRecord);
+
+      const allEdges: StoredEdge[] = [];
+      
+      for (const relType of relationTypeNames) {
+        // Validate relation type name
+        if (!/^[A-Z][A-Z0-9_]*$/.test(relType)) continue;
+        
+        let query: string;
+        if (direction === 'OUTGOING') {
+          query = `
+            SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
+            FROM ${relType}
+            WHERE in = type::thing($nodeId)
+              AND validAt <= $asOf
+              AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
+          `;
+        } else if (direction === 'INCOMING') {
+          query = `
+            SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
+            FROM ${relType}
+            WHERE out = type::thing($nodeId)
+              AND validAt <= $asOf
+              AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
+          `;
+        } else {
+          query = `
+            SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
+            FROM ${relType}
+            WHERE (in = type::thing($nodeId) OR out = type::thing($nodeId))
+              AND validAt <= $asOf
+              AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
+          `;
+        }
+        
+        const [rows] = (await db.query(query, { nodeId, asOf })) as any[];
+        
+        for (const row of rows ?? []) {
+          allEdges.push(fromRelateEdgeRecord(row, relType));
+        }
+      }
+      
+      return allEdges;
     },
 
     async upsertEdge(input) {
       const now = new Date().toISOString();
       const validAt = input.validAt ?? now;
+      const relationType = canonicalName(input.relationType);
 
-      if (input.id) {
-        await db.query(
-          /* surrealql */ `
-          UPDATE edge
-          SET invalidAt = $validAt
-          WHERE id = $id
-            AND (invalidAt = NONE OR invalidAt > $validAt);
-        `,
-          { id: input.id, validAt },
-        );
+      // Validate relation type name to prevent SQL injection
+      if (!/^[A-Z][A-Z0-9_]*$/.test(relationType)) {
+        throw new Error(`Invalid relation type name: ${relationType}`);
       }
 
-      const [createRes] = (await db.create('edge', {
-        id: input.id,
-        relationType: canonicalName(input.relationType),
-        fromId: input.fromId,
-        toId: input.toId,
-        properties: input.properties ?? {},
-        validAt,
-      })) as any[];
+      // Create edge using RELATE syntax
+      const results = (await db.query(
+        /* surrealql */ `
+        LET $from = type::thing($fromId);
+        LET $to = type::thing($toId);
+        
+        UPDATE ${relationType}
+        SET invalidAt = $validAt
+        WHERE in = $from 
+          AND out = $to
+          AND (invalidAt = NONE OR invalidAt > $validAt);
+        
+        RELATE $from->${relationType}->$to
+        SET validAt = $validAt,
+            properties = $properties;
+        `,
+        {
+          fromId: input.fromId,
+          toId: input.toId,
+          validAt,
+          properties: input.properties ?? {},
+        },
+      )) as any[];
 
-      return fromEdgeRecord(createRes);
+      // Results: [LET, LET, UPDATE, RELATE] - RELATE is at index 3
+      const created = results[3]?.[0];
+      return fromRelateEdgeRecord(created, relationType);
     },
 
     async getOntologySummary() {

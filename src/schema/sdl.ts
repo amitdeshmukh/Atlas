@@ -31,6 +31,48 @@ export const schemaSDL = /* GraphQL */ `
 
     "Evaluate a named list definition"
     list(name: String!, asOf: DateTime): ListResult
+
+    """
+    Find how two types are connected in the ontology graph.
+    Returns relationship paths (not instances), up to maxDepth hops.
+    Useful for agents asking: "How is PERSON connected to PRODUCT?"
+    """
+    findOntologyPath(
+      fromType: String!
+      toType: String!
+      maxDepth: Int = 3
+    ): [OntologyPath!]!
+
+    """
+    Suggest the best matching type for creating a new entity.
+    Agent describes what they want to create, system suggests appropriate type.
+    """
+    suggestType(
+      description: String!
+      limit: Int = 3
+    ): [TypeSuggestion!]!
+
+    """
+    Search relationships of a specific node by meaning.
+    Useful for: "Show me this person's connections related to 'technology'"
+    """
+    searchRelationships(
+      nodeId: ID!
+      query: String!
+      asOf: DateTime
+      limit: Int = 10
+    ): [RelationshipSearchHit!]!
+
+    """
+    Find paths between two node INSTANCES in the world model.
+    Uses SurrealDB's native graph traversal for scalability.
+    Useful for: "How is Alice connected to Bob?"
+    """
+    findInstancePath(
+      fromNodeId: ID!
+      toNodeId: ID!
+      maxDepth: Int = 3
+    ): [InstancePath!]!
   }
 
   type OntologySearchResult {
@@ -60,6 +102,74 @@ export const schemaSDL = /* GraphQL */ `
     typeCount: Int!
     relationCount: Int!
     listCount: Int!
+  }
+
+  """
+  A path through the ontology graph connecting two types.
+  Example: PERSON --EMPLOYED_BY--> COMPANY --MANUFACTURES--> PRODUCT
+  """
+  type OntologyPath {
+    "Human-readable description of the path"
+    pathDescription: String!
+    "The sequence of relations in this path"
+    steps: [OntologyPathStep!]!
+    "Total number of hops"
+    depth: Int!
+  }
+
+  type OntologyPathStep {
+    "The relation traversed in this step"
+    relation: RelationType!
+    "Direction relative to the path: OUTGOING (A->B) or INCOMING (A<-B)"
+    direction: Direction!
+    "The type reached after this step"
+    targetType: NodeType!
+  }
+
+  """
+  A suggested type for creating a new entity.
+  Helps agents know what type to use and what properties are available.
+  """
+  type TypeSuggestion {
+    "The suggested type"
+    type: NodeType!
+    "Semantic similarity score (0-1)"
+    confidence: Float!
+    "Why this type was suggested"
+    reason: String!
+    "Properties that should/can be provided for this type"
+    availableProperties: [PropertyDef!]!
+  }
+
+  """
+  A relationship search hit - relationship matching a semantic query.
+  """
+  type RelationshipSearchHit {
+    "The matching edge"
+    edge: GraphEdge!
+    "Semantic similarity score (0-1)"
+    score: Float!
+    "Why this relationship matched"
+    matchReason: String!
+  }
+
+  """
+  A path between two node instances in the world model.
+  """
+  type InstancePath {
+    "Human-readable path description"
+    pathDescription: String!
+    "The edges traversed in this path"
+    edges: [InstancePathEdge!]!
+    "Number of edge hops"
+    depth: Int!
+  }
+
+  type InstancePathEdge {
+    id: ID!
+    relationType: String!
+    fromNode: Node!
+    toNode: Node!
   }
 
   "A type of node in the world model - supports ontology-level traversal"
