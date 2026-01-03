@@ -346,9 +346,13 @@ export class WorldModel {
   /**
    * Create or update a type in the ontology.
    */
-  async upsertType(name: string, description: string): Promise<TypeDef> {
+  async upsertType(
+    name: string,
+    description: string,
+    properties?: PropertyDef[],
+  ): Promise<TypeDef> {
     validateDescription(description);
-    return this.adapter.upsertTypeDef(name, description);
+    return this.adapter.upsertTypeDef(name, description, properties);
   }
 
   /**

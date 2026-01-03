@@ -28,8 +28,10 @@ export function registerResources(server: FastMCP, worldModel: WorldModel): void
             },
             tips: [
               'Use search_concepts to discover types and relations by meaning',
-              'Use get_type_info to see properties and relationships for a type',
+              'Use get_type_info or get_relation_info to see details about schema elements',
+              'Use get_ontology_summary to understand the scope of the world model',
               'Use suggest_type when creating new entities if unsure of the type',
+              'Use create_type and create_relation_type to extend the ontology dynamically',
             ],
           },
           null,
@@ -161,12 +163,14 @@ search_concepts("people who work at companies")
 
 This returns types and relations matching your intent.
 
-### 2. Explore a Type
+### 2. Explore Types and Relations
 
-Get details about a specific type:
+Get details about a specific type or relation:
 
 \`\`\`
 get_type_info("PERSON")
+get_relation_info("EMPLOYED_BY")
+get_ontology_summary()  // See counts of types, relations, lists
 \`\`\`
 
 Returns properties, outgoing relations, and incoming relations.
@@ -196,7 +200,37 @@ create_entity("PERSON", { fullName: "Bob Smith", email: "bob@example.com" })
 link_entities("node:bob", "EMPLOYED_BY", "node:techcorp")
 \`\`\`
 
-### 6. Temporal Data (Historical Records)
+Update an existing entity:
+
+\`\`\`
+update_entity("node:bob", { email: "bob.smith@example.com" })
+\`\`\`
+
+### 6. Extend the Ontology
+
+Create new types with properties:
+
+\`\`\`
+create_type("PRODUCT", "A product manufactured by a company", properties: [
+  { name: "NAME", description: "Product name", dataType: "STRING" },
+  { name: "CATEGORY", description: "Product category", dataType: "STRING" },
+  { name: "RELEASE_DATE", description: "Release date", dataType: "DATE" }
+])
+\`\`\`
+
+Create relations between types:
+
+\`\`\`
+create_relation_type("MADE_BY", "Product manufactured by company", "PRODUCT", "COMPANY")
+\`\`\`
+
+Find how types connect:
+
+\`\`\`
+find_ontology_paths("PRODUCT", "PERSON")
+\`\`\`
+
+### 7. Temporal Data (Historical Records)
 
 All data in the world model is temporal. Relationships support validity windows:
 
@@ -242,10 +276,11 @@ define_list(
 )
 \`\`\`
 
-Then query members:
+Then query members or inspect the definition:
 
 \`\`\`
 get_list_members("TECH_EMPLOYEES")
+get_list_definition("TECH_EMPLOYEES")  // See the filter criteria
 \`\`\`
 
 ## Best Practices for Agents

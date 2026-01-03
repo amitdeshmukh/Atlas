@@ -58,6 +58,45 @@ Get detailed information about a specific type.
 }
 ```
 
+### get_relation_info
+Get detailed information about a specific relation type.
+
+```json
+{
+  "tool": "get_relation_info",
+  "arguments": { "relationName": "EMPLOYED_BY" }
+}
+```
+
+**Response:**
+```json
+{
+  "name": "EMPLOYED_BY",
+  "description": "Indicates that a person is or was employed by a company.",
+  "sourceType": "PERSON",
+  "targetType": "COMPANY"
+}
+```
+
+### get_ontology_summary
+Get a summary of the ontology showing counts of types, relations, and lists.
+
+```json
+{
+  "tool": "get_ontology_summary",
+  "arguments": {}
+}
+```
+
+**Response:**
+```json
+{
+  "typeCount": 5,
+  "relationCount": 3,
+  "listCount": 2
+}
+```
+
 ### suggest_type
 Given a description of what you want to create, suggests the best matching type.
 
@@ -124,6 +163,37 @@ Find how two entities are connected.
 }
 ```
 
+### find_ontology_paths
+Find how two types are connected in the ontology schema.
+
+```json
+{
+  "tool": "find_ontology_paths",
+  "arguments": {
+    "fromType": "PERSON",
+    "toType": "COMPANY",
+    "maxDepth": 3
+  }
+}
+```
+
+**Response:**
+```json
+[
+  {
+    "pathDescription": "PERSON -->[EMPLOYED_BY]--> COMPANY",
+    "depth": 1,
+    "steps": [
+      {
+        "relation": { "name": "EMPLOYED_BY", "description": "..." },
+        "direction": "OUTGOING",
+        "targetType": "COMPANY"
+      }
+    ]
+  }
+]
+```
+
 ## Mutation Tools
 
 ### create_entity
@@ -148,6 +218,32 @@ Create a new entity in the world model.
   "id": "node:xyz789",
   "type": "PERSON",
   "properties": { "fullName": "Alice Smith", "email": "alice@example.com" },
+  "validAt": "2026-01-03T12:00:00Z",
+  "invalidAt": null
+}
+```
+
+### update_entity
+Update an existing entity's properties (partial update - merged with existing).
+
+```json
+{
+  "tool": "update_entity",
+  "arguments": {
+    "id": "node:xyz789",
+    "properties": {
+      "email": "alice.smith@newcompany.com"
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "node:xyz789",
+  "type": "PERSON",
+  "properties": { "fullName": "Alice Smith", "email": "alice.smith@newcompany.com" },
   "validAt": "2026-01-03T12:00:00Z",
   "invalidAt": null
 }
@@ -217,6 +313,66 @@ End the validity of an entity or relationship. Use this to record when something
 }
 ```
 
+## Ontology Mutation Tools
+
+### create_type
+Create a new type in the ontology with optional properties.
+
+```json
+{
+  "tool": "create_type",
+  "arguments": {
+    "name": "PRODUCT",
+    "description": "A product manufactured and sold by a company",
+    "properties": [
+      { "name": "NAME", "description": "Product name", "dataType": "STRING" },
+      { "name": "CATEGORY", "description": "Product category", "dataType": "STRING" },
+      { "name": "RELEASE_DATE", "description": "Release date", "dataType": "DATE" },
+      { "name": "PRICE", "description": "Product price in USD", "dataType": "NUMBER" }
+    ]
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "name": "PRODUCT",
+  "description": "A product manufactured and sold by a company",
+  "properties": [
+    { "name": "NAME", "description": "Product name", "dataType": "STRING" },
+    { "name": "CATEGORY", "description": "Product category", "dataType": "STRING" },
+    { "name": "RELEASE_DATE", "description": "Release date", "dataType": "DATE" },
+    { "name": "PRICE", "description": "Product price in USD", "dataType": "NUMBER" }
+  ]
+}
+```
+
+### create_relation_type
+Create a new relation type in the ontology. Source and target types must already exist.
+
+```json
+{
+  "tool": "create_relation_type",
+  "arguments": {
+    "name": "MANUFACTURES",
+    "description": "Indicates that a company manufactures a product",
+    "sourceType": "COMPANY",
+    "targetType": "PRODUCT"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "name": "MANUFACTURES",
+  "description": "Indicates that a company manufactures a product",
+  "sourceType": "COMPANY",
+  "targetType": "PRODUCT"
+}
+```
+
 ## List Tools
 
 ### define_list
@@ -245,6 +401,32 @@ Get all entities that match a defined list.
 {
   "tool": "get_list_members",
   "arguments": { "name": "TECH_EMPLOYEES" }
+}
+```
+
+### get_list_definition
+Get the definition of a list including its filter criteria.
+
+```json
+{
+  "tool": "get_list_definition",
+  "arguments": { "name": "TECH_EMPLOYEES" }
+}
+```
+
+**Response:**
+```json
+{
+  "name": "TECH_EMPLOYEES",
+  "description": "People employed at tech companies",
+  "targetType": "PERSON",
+  "filter": {
+    "operator": "HAS_RELATION",
+    "relationType": "EMPLOYED_BY",
+    "targetFilter": { "operator": "CONTAINS", "field": "name", "value": "Tech" }
+  },
+  "validAt": "2026-01-01T00:00:00Z",
+  "invalidAt": null
 }
 ```
 
@@ -347,4 +529,49 @@ invalidate_record(id: "EMPLOYED_BY:abc123", invalidAt: "2024-12-31T00:00:00Z")
 ```
 
 This preserves the full history: the relationship remains queryable for historical analysis (e.g., "Who was CFO in 2020?") but won't appear in current-time queries.
+
+## Extending the Ontology Example
+
+Agent task: "Track products manufactured by companies"
+
+```
+1. get_ontology_summary()
+   → Shows current counts: 2 types, 1 relation, 0 lists
+
+2. search_concepts(query: "product merchandise goods")
+   → No matching types found - need to create one
+
+3. create_type(
+     name: "PRODUCT",
+     description: "A product manufactured and sold by a company",
+     properties: [
+       { name: "NAME", description: "Product name", dataType: "STRING" },
+       { name: "CATEGORY", description: "Product category", dataType: "STRING" },
+       { name: "RELEASE_DATE", description: "Release date", dataType: "DATE" }
+     ]
+   )
+   → Creates PRODUCT type with properties
+
+4. create_relation_type(
+     name: "MANUFACTURES",
+     description: "Indicates that a company manufactures a product",
+     sourceType: "COMPANY",
+     targetType: "PRODUCT"
+   )
+   → Creates MANUFACTURES relation
+
+5. find_ontology_paths(fromType: "PERSON", toType: "PRODUCT")
+   → Shows: PERSON --EMPLOYED_BY--> COMPANY --MANUFACTURES--> PRODUCT
+
+6. create_entity(type: "PRODUCT", properties: { name: "iPhone 16", category: "Smartphone" })
+   → Creates the product
+
+7. find_entities(type: "COMPANY", filter: { operator: "CONTAINS", field: "name", value: "Apple" })
+   → Finds Apple's node ID
+
+8. link_entities(fromId: "node:apple", relationType: "MANUFACTURES", toId: "node:iphone16")
+   → Links Apple to iPhone 16
+```
+
+Now agents can traverse: "Find all products made by companies that employ Alice"
 

@@ -234,11 +234,17 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   server.addTool({
     name: 'create_type',
     description:
-      'Create a new type in the ontology. Use this to extend the schema with new entity types ' +
-      '(e.g., PRODUCT, NEWS_ARTICLE, EVENT). Types must have unique names in UPPER_SNAKE_CASE.',
+      'Create a new type in the ontology with optional properties. ' +
+      'Use this to extend the schema with new entity types (e.g., PRODUCT, NEWS_ARTICLE). ' +
+      'Types must have unique names in UPPER_SNAKE_CASE. ' +
+      'Properties define what data entities of this type can store.',
     parameters: CreateTypeSchema,
     execute: async (args) => {
-      const result = await worldModel.upsertType(args.name, args.description);
+      const result = await worldModel.upsertType(
+        args.name,
+        args.description,
+        args.properties,
+      );
       return JSON.stringify(result, null, 2);
     },
   });

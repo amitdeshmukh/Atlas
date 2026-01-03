@@ -148,12 +148,24 @@ export const InvalidateRecordSchema = z.object({
 
 // === Ontology Mutation Tools ===
 
+export const PropertyDefSchema = z.object({
+  name: z.string().describe('Property name in UPPER_SNAKE_CASE (e.g., "NAME", "RELEASE_DATE")'),
+  description: z.string().describe('Human-readable description of the property'),
+  dataType: z
+    .enum(['STRING', 'NUMBER', 'BOOLEAN', 'DATE'])
+    .describe('Data type of the property'),
+});
+
 export const CreateTypeSchema = z.object({
   name: z.string().describe('Name of the type in UPPER_SNAKE_CASE (e.g., "PRODUCT", "NEWS_ARTICLE")'),
   description: z
     .string()
     .min(10)
     .describe('Human-readable description of the type (min 10 chars)'),
+  properties: z
+    .array(PropertyDefSchema)
+    .optional()
+    .describe('Optional array of property definitions for this type'),
 });
 
 export const CreateRelationTypeSchema = z.object({
