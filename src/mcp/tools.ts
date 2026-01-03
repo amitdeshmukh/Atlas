@@ -3,388 +3,318 @@
  * Provides agent-friendly tools for discovering, querying, and mutating the world model.
  */
 
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { FastMCP } from 'fastmcp';
 import type { WorldModel } from '../core/worldModel.js';
 import type { FilterDSL } from '../core/types.js';
+import {
+  SearchConceptsSchema,
+  GetTypeInfoSchema,
+  GetRelationInfoSchema,
+  GetOntologySummarySchema,
+  SuggestTypeSchema,
+  FindEntitiesSchema,
+  GetEntitySchema,
+  GetRelationshipsSchema,
+  FindPathSchema,
+  FindOntologyPathsSchema,
+  CreateEntitySchema,
+  UpdateEntitySchema,
+  LinkEntitiesSchema,
+  InvalidateRecordSchema,
+  DefineListSchema,
+  GetListMembersSchema,
+  GetListDefinitionSchema,
+  GetFilterExamplesSchema,
+  CreateTypeSchema,
+  CreateRelationTypeSchema,
+} from './schemas.js';
 
 /**
- * Register all available tools.
+ * Register all tools with the FastMCP server.
  */
-export function registerTools(): Tool[] {
-  return [
-    // Discovery Tools
-    {
-      name: 'search_concepts',
-      description:
-        'Semantic search over the ontology - find types and relations by meaning. ' +
-        'Use this to discover what kinds of entities exist (e.g., "people who work at companies").',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'Natural language description of what you are looking for',
-          },
-          limit: {
-            type: 'number',
-            description: 'Maximum number of results (default: 10)',
-            default: 10,
-          },
-        },
-        required: ['query'],
-      },
+export function registerTools(server: FastMCP, worldModel: WorldModel): void {
+  // Discovery Tools
+  server.addTool({
+    name: 'search_concepts',
+    description:
+      'Semantic search over the ontology - find types and relations by meaning. ' +
+      'Use this to discover what kinds of entities exist (e.g., "people who work at companies").',
+    parameters: SearchConceptsSchema,
+    execute: async (args) => {
+      const result = await worldModel.searchConcepts(args.query, args.limit);
+      return JSON.stringify(result, null, 2);
     },
-    {
-      name: 'get_type_info',
-      description:
-        'Get detailed information about a specific type including its properties and relationships.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          typeName: {
-            type: 'string',
-            description: 'The name of the type (e.g., "PERSON", "COMPANY")',
-          },
-        },
-        required: ['typeName'],
-      },
-    },
-    {
-      name: 'suggest_type',
-      description:
-        'Given a description of what you want to create, suggests the best matching type.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          description: {
-            type: 'string',
-            description: 'Description of the entity you want to create',
-          },
-          limit: {
-            type: 'number',
-            description: 'Number of suggestions (default: 3)',
-            default: 3,
-          },
-        },
-        required: ['description'],
-      },
-    },
+  });
 
-    // Query Tools
-    {
-      name: 'find_entities',
-      description:
-        'Find entities of a specific type, optionally filtered. ' +
-        'See worldmodel://help/filter-examples for filter syntax.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          type: {
-            type: 'string',
-            description: 'The type of entities to find (e.g., "PERSON")',
-          },
-          filter: {
-            type: 'object',
-            description: 'Optional FilterDSL object to filter results',
-          },
-          limit: {
-            type: 'number',
-            description: 'Maximum number of results (default: 100)',
-            default: 100,
-          },
-        },
-        required: ['type'],
-      },
+  server.addTool({
+    name: 'get_type_info',
+    description:
+      'Get detailed information about a specific type including its properties and relationships.',
+    parameters: GetTypeInfoSchema,
+    execute: async (args) => {
+      const result = await worldModel.getTypeInfo(args.typeName);
+      return JSON.stringify(result, null, 2);
     },
-    {
-      name: 'get_entity',
-      description: 'Get a specific entity by its ID.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            description: 'The entity ID (e.g., "node:abc123")',
-          },
-        },
-        required: ['id'],
-      },
-    },
-    {
-      name: 'get_relationships',
-      description: "Get all relationships for an entity. Returns the entity's connections.",
-      inputSchema: {
-        type: 'object',
-        properties: {
-          entityId: {
-            type: 'string',
-            description: 'The entity ID',
-          },
-          direction: {
-            type: 'string',
-            enum: ['INCOMING', 'OUTGOING', 'BOTH'],
-            description: 'Direction of relationships (default: BOTH)',
-            default: 'BOTH',
-          },
-        },
-        required: ['entityId'],
-      },
-    },
-    {
-      name: 'find_path',
-      description:
-        'Find how two entities are connected through the graph. ' +
-        'Useful for questions like "How is Alice connected to Bob?"',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          fromId: {
-            type: 'string',
-            description: 'Starting entity ID',
-          },
-          toId: {
-            type: 'string',
-            description: 'Target entity ID',
-          },
-          maxDepth: {
-            type: 'number',
-            description: 'Maximum number of hops (default: 3)',
-            default: 3,
-          },
-        },
-        required: ['fromId', 'toId'],
-      },
-    },
+  });
 
-    // Mutation Tools
-    {
-      name: 'create_entity',
-      description:
-        'Create a new entity in the world model. ' +
-        'Use suggest_type first if unsure which type to use.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          type: {
-            type: 'string',
-            description: 'The type of entity (e.g., "PERSON")',
-          },
-          properties: {
-            type: 'object',
-            description: 'Properties for the entity (must match type definition)',
-          },
-        },
-        required: ['type', 'properties'],
-      },
+  server.addTool({
+    name: 'get_relation_info',
+    description:
+      'Get detailed information about a specific relation type including source and target types.',
+    parameters: GetRelationInfoSchema,
+    execute: async (args) => {
+      const result = await worldModel.getRelationInfo(args.relationName);
+      return JSON.stringify(result, null, 2);
     },
-    {
-      name: 'link_entities',
-      description:
-        'Create a relationship between two entities. ' +
-        'Use search_concepts to discover valid relation types.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          fromId: {
-            type: 'string',
-            description: 'Source entity ID',
-          },
-          relationType: {
-            type: 'string',
-            description: 'Type of relationship (e.g., "EMPLOYED_BY")',
-          },
-          toId: {
-            type: 'string',
-            description: 'Target entity ID',
-          },
-          properties: {
-            type: 'object',
-            description: 'Optional properties for the relationship',
-          },
-        },
-        required: ['fromId', 'relationType', 'toId'],
-      },
+  });
+
+  server.addTool({
+    name: 'get_ontology_summary',
+    description:
+      'Get a summary of the ontology showing counts of types, relations, and lists. ' +
+      'Useful for understanding the scope of the world model.',
+    parameters: GetOntologySummarySchema,
+    execute: async () => {
+      const result = await worldModel.getOntologySummary();
+      return JSON.stringify(result, null, 2);
     },
+  });
 
-    // List Tools
-    {
-      name: 'define_list',
-      description:
-        'Define a dynamic list (saved filter). ' +
-        'Lists are predicates, not containers - membership is evaluated at query time.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Unique name for the list',
-          },
-          description: {
-            type: 'string',
-            description: 'Human-readable description (min 10 chars)',
-          },
-          targetType: {
-            type: 'string',
-            description: 'The type of entities this list contains',
-          },
-          filter: {
-            type: 'object',
-            description: 'FilterDSL defining list membership',
-          },
-        },
-        required: ['name', 'description', 'targetType', 'filter'],
-      },
-    },
-    {
-      name: 'get_list_members',
-      description: 'Get all entities that match a defined list.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Name of the list to evaluate',
-          },
-        },
-        required: ['name'],
-      },
-    },
-
-    // Help Tool
-    {
-      name: 'get_filter_examples',
-      description:
-        'Get examples of FilterDSL syntax for composing queries and list definitions.',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-    },
-  ];
-}
-
-/**
- * Handle a tool call.
- */
-export async function handleToolCall(
-  worldModel: WorldModel,
-  toolName: string,
-  args: Record<string, unknown>,
-): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
-  try {
-    const result = await executeToolCall(worldModel, toolName, args);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        },
-      ],
-    };
-  }
-}
-
-async function executeToolCall(
-  worldModel: WorldModel,
-  toolName: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  switch (toolName) {
-    // Discovery
-    case 'search_concepts':
-      return worldModel.searchConcepts(
-        args.query as string,
-        (args.limit as number) ?? 10,
-      );
-
-    case 'get_type_info':
-      return worldModel.getTypeInfo(args.typeName as string);
-
-    case 'suggest_type': {
-      const results = await worldModel.searchConcepts(
-        args.description as string,
-        (args.limit as number) ?? 3,
-      );
-      return results.types.map((hit) => ({
+  server.addTool({
+    name: 'suggest_type',
+    description:
+      'Given a description of what you want to create, suggests the best matching type.',
+    parameters: SuggestTypeSchema,
+    execute: async (args) => {
+      const results = await worldModel.searchConcepts(args.description, args.limit);
+      const suggestions = results.types.map((hit) => ({
         type: hit.type,
         confidence: hit.score,
         reason: hit.matchReason ?? hit.type.description,
       }));
-    }
+      return JSON.stringify(suggestions, null, 2);
+    },
+  });
 
-    // Query
-    case 'find_entities':
-      return worldModel.findEntities(
-        args.type as string,
-        args.filter as FilterDSL | null,
+  // Query Tools
+  server.addTool({
+    name: 'find_entities',
+    description:
+      'Find entities of a specific type, optionally filtered. ' +
+      'See worldmodel://help/filter-examples for filter syntax.',
+    parameters: FindEntitiesSchema,
+    execute: async (args) => {
+      const result = await worldModel.findEntities(
+        args.type,
+        (args.filter as FilterDSL) ?? null,
         undefined,
-        (args.limit as number) ?? 100,
+        args.limit,
       );
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    case 'get_entity':
-      return worldModel.getEntity(args.id as string);
+  server.addTool({
+    name: 'get_entity',
+    description: 'Get a specific entity by its ID.',
+    parameters: GetEntitySchema,
+    execute: async (args) => {
+      const result = await worldModel.getEntity(args.id);
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    case 'get_relationships':
-      return worldModel.getRelationships(
-        args.entityId as string,
-        (args.direction as 'INCOMING' | 'OUTGOING' | 'BOTH') ?? 'BOTH',
+  server.addTool({
+    name: 'get_relationships',
+    description: "Get all relationships for an entity. Returns the entity's connections.",
+    parameters: GetRelationshipsSchema,
+    execute: async (args) => {
+      const result = await worldModel.getRelationships(args.entityId, args.direction);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'find_path',
+    description:
+      'Find how two entities are connected through the graph. ' +
+      'Useful for questions like "How is Alice connected to Bob?"',
+    parameters: FindPathSchema,
+    execute: async (args) => {
+      const result = await worldModel.findInstancePaths(
+        args.fromId,
+        args.toId,
+        args.maxDepth,
       );
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    case 'find_path':
-      return worldModel.findInstancePaths(
-        args.fromId as string,
-        args.toId as string,
-        (args.maxDepth as number) ?? 3,
+  server.addTool({
+    name: 'find_ontology_paths',
+    description:
+      'Find how two types are connected in the ontology schema. ' +
+      'Useful for understanding possible relationships between types ' +
+      '(e.g., "How can PERSON connect to COMPANY?").',
+    parameters: FindOntologyPathsSchema,
+    execute: async (args) => {
+      const result = await worldModel.findOntologyPaths(
+        args.fromType,
+        args.toType,
+        args.maxDepth,
       );
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    // Mutation
-    case 'create_entity':
-      return worldModel.createEntity(
-        args.type as string,
-        args.properties as Record<string, unknown>,
+  // Mutation Tools
+  server.addTool({
+    name: 'create_entity',
+    description:
+      'Create a new entity in the world model. ' +
+      'Use suggest_type first if unsure which type to use.',
+    parameters: CreateEntitySchema,
+    execute: async (args) => {
+      const result = await worldModel.createEntity(args.type, args.properties);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'update_entity',
+    description:
+      'Update an existing entity\'s properties. ' +
+      'Properties are merged with existing values (partial update).',
+    parameters: UpdateEntitySchema,
+    execute: async (args) => {
+      const result = await worldModel.updateEntity(args.id, args.properties);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'link_entities',
+    description:
+      'Create a relationship between two entities. ' +
+      'Use search_concepts to discover valid relation types. ' +
+      'Supports temporal validity windows via validAt/invalidAt for historical data.',
+    parameters: LinkEntitiesSchema,
+    execute: async (args) => {
+      const result = await worldModel.linkEntities(
+        args.fromId,
+        args.relationType,
+        args.toId,
+        args.properties,
+        args.validAt,
       );
+      // If invalidAt is provided, immediately invalidate the relationship
+      if (args.invalidAt) {
+        await worldModel.invalidate(result.id, args.invalidAt);
+        return JSON.stringify({ ...result, invalidAt: args.invalidAt }, null, 2);
+      }
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    case 'link_entities':
-      return worldModel.linkEntities(
-        args.fromId as string,
-        args.relationType as string,
-        args.toId as string,
-        args.properties as Record<string, unknown> | undefined,
+  server.addTool({
+    name: 'invalidate_record',
+    description:
+      'End the validity of an entity or relationship by setting its invalidAt timestamp. ' +
+      'Use this to record when something stopped being true (e.g., person left company). ' +
+      'Supports historical dates for backdating.',
+    parameters: InvalidateRecordSchema,
+    execute: async (args) => {
+      const invalidAt = args.invalidAt ?? new Date().toISOString();
+      const success = await worldModel.invalidate(args.id, invalidAt);
+      return JSON.stringify({ success, id: args.id, invalidAt }, null, 2);
+    },
+  });
+
+  // Ontology Mutation Tools
+  server.addTool({
+    name: 'create_type',
+    description:
+      'Create a new type in the ontology. Use this to extend the schema with new entity types ' +
+      '(e.g., PRODUCT, NEWS_ARTICLE, EVENT). Types must have unique names in UPPER_SNAKE_CASE.',
+    parameters: CreateTypeSchema,
+    execute: async (args) => {
+      const result = await worldModel.upsertType(args.name, args.description);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'create_relation_type',
+    description:
+      'Create a new relation type in the ontology. Use this to define how types can connect ' +
+      '(e.g., PRODUCT --MADE_BY--> COMPANY). Both source and target types must already exist.',
+    parameters: CreateRelationTypeSchema,
+    execute: async (args) => {
+      const result = await worldModel.upsertRelationType(
+        args.name,
+        args.description,
+        args.sourceType,
+        args.targetType,
       );
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    // Lists
-    case 'define_list':
-      return worldModel.defineList(
-        args.name as string,
-        args.description as string,
-        args.targetType as string,
+  // List Tools
+  server.addTool({
+    name: 'define_list',
+    description:
+      'Define a dynamic list (saved filter). ' +
+      'Lists are predicates, not containers - membership is evaluated at query time.',
+    parameters: DefineListSchema,
+    execute: async (args) => {
+      const result = await worldModel.defineList(
+        args.name,
+        args.description,
+        args.targetType,
         args.filter as FilterDSL,
       );
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    case 'get_list_members':
-      return worldModel.getListMembers(args.name as string);
+  server.addTool({
+    name: 'get_list_members',
+    description: 'Get all entities that match a defined list.',
+    parameters: GetListMembersSchema,
+    execute: async (args) => {
+      const result = await worldModel.getListMembers(args.name);
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    // Help
-    case 'get_filter_examples':
-      return getFilterExamples();
+  server.addTool({
+    name: 'get_list_definition',
+    description:
+      'Get the definition of a list including its filter criteria. ' +
+      'Useful for inspecting what a list is filtering on.',
+    parameters: GetListDefinitionSchema,
+    execute: async (args) => {
+      const result = await worldModel.getListDefinition(args.name);
+      return JSON.stringify(result, null, 2);
+    },
+  });
 
-    default:
-      throw new Error(`Unknown tool: ${toolName}`);
-  }
+  // Help Tool
+  server.addTool({
+    name: 'get_filter_examples',
+    description:
+      'Get examples of FilterDSL syntax for composing queries and list definitions.',
+    parameters: GetFilterExamplesSchema,
+    execute: async () => {
+      return JSON.stringify(getFilterExamples(), null, 2);
+    },
+  });
 }
 
+/**
+ * Helper function to generate filter examples for the help tool.
+ */
 function getFilterExamples() {
   return {
     description: 'FilterDSL examples for composing queries and list definitions',
@@ -449,18 +379,18 @@ function getFilterExamples() {
         description: 'Find entities that do NOT have an EMPLOYED_BY relationship',
       },
       {
-        name: 'Complex: Not employed at Tech companies',
+        name: 'Complex: Not employed at Google',
         filter: {
           operator: 'NOT',
           operands: [
             {
               operator: 'HAS_RELATION',
               relationType: 'EMPLOYED_BY',
-              targetFilter: { operator: 'CONTAINS', field: 'name', value: 'Tech' },
+              targetFilter: { operator: 'CONTAINS', field: 'name', value: 'Google' },
             },
           ],
         },
-        description: 'Find people NOT employed by companies with "Tech" in name',
+        description: 'Find people NOT employed by companies with "Google" in name',
       },
     ],
   };

@@ -6,15 +6,48 @@ import {
   type TestContext,
 } from './testHelpers.js';
 
+// Track context globally for cleanup on process exit
+let globalCtx: TestContext | undefined;
+let cleanupDone = false;
+
+const runCleanup = async () => {
+  if (cleanupDone || !globalCtx) return;
+  cleanupDone = true;
+  console.log('\n[Test] Running cleanup...');
+  try {
+    await teardownTestDatabase(globalCtx);
+  } catch (err) {
+    console.error('[Test] Cleanup error:', err);
+  }
+};
+
+// Register cleanup handlers once at module load
+process.once('SIGINT', async () => {
+  console.log('\n[Test] SIGINT received, cleaning up...');
+  await runCleanup();
+  process.exit(130);
+});
+
+process.once('SIGTERM', async () => {
+  console.log('\n[Test] SIGTERM received, cleaning up...');
+  await runCleanup();
+  process.exit(143);
+});
+
+process.once('beforeExit', async () => {
+  await runCleanup();
+});
+
 describe('Integration Tests', () => {
   let ctx: TestContext;
 
   beforeAll(async () => {
     ctx = await setupTestDatabase(true); // Run bootstrap
+    globalCtx = ctx; // Track for cleanup handlers
   });
 
   afterAll(async () => {
-    await teardownTestDatabase(ctx);
+    await runCleanup();
   });
 
   describe('Bootstrap', () => {
@@ -1042,6 +1075,145 @@ describe('Integration Tests', () => {
 
       expect(result.errors).toBeDefined();
       expect((result.errors?.[0] as { message: string })?.message).toContain('must be strictly before');
+    });
+  });
+
+  describe('Historical Relationships', () => {
+    let personId: string;
+    let companyId: string;
+
+    beforeAll(async () => {
+      // Create entities (these get created with current timestamps)
+      const personResult = await graphqlQuery<{
+        upsertNode: { id: string; validAt: string };
+      }>(
+        ctx.app,
+        `
+        mutation {
+          upsertNode(
+            type: "PERSON"
+            properties: {
+              fullName: "Historical Test Person"
+              email: "historical@example.com"
+            }
+          ) {
+            id
+            validAt
+          }
+        }
+        `,
+      );
+      personId = personResult.data?.upsertNode.id as string;
+
+      const companyResult = await graphqlQuery<{
+        upsertNode: { id: string };
+      }>(
+        ctx.app,
+        `
+        mutation {
+          upsertNode(
+            type: "COMPANY"
+            properties: {
+              name: "Historical Corp"
+              revenue: 5000000
+            }
+          ) {
+            id
+          }
+        }
+        `,
+      );
+      companyId = companyResult.data?.upsertNode.id as string;
+    });
+
+    it('should create relationships with historical validAt dates', async () => {
+      // Create a relationship that "started" in 2014
+      // Even though the entities were just created, we should be able to
+      // backdate the relationship to represent historical facts
+      const historicalDate = '2014-05-01T00:00:00Z';
+      
+      const result = await graphqlQuery<{
+        upsertEdge: {
+          id: string;
+          relationType: string;
+          validAt: string;
+          invalidAt: string | null;
+        };
+      }>(
+        ctx.app,
+        `
+        mutation {
+          upsertEdge(
+            relationType: "EMPLOYED_BY"
+            fromId: "${personId}"
+            toId: "${companyId}"
+            validAt: "${historicalDate}"
+          ) {
+            id
+            relationType
+            validAt
+            invalidAt
+          }
+        }
+        `,
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.upsertEdge.relationType).toBe('EMPLOYED_BY');
+      expect(result.data?.upsertEdge.validAt).toBe(historicalDate);
+      expect(result.data?.upsertEdge.invalidAt).toBeNull();
+    });
+
+    it('should create bounded historical relationships via WorldModel', async () => {
+      // This tests the WorldModel.linkEntities directly with historical dates
+      // The MCP tool uses this under the hood
+      const { WorldModel } = await import('../core/worldModel.js');
+      const { createStorageAdapter } = await import('../adapters/index.js');
+      
+      const adapter = createStorageAdapter('surreal');
+      const worldModel = new WorldModel(adapter);
+
+      // Create fresh entities for this test
+      const person = await worldModel.createEntity('PERSON', {
+        fullName: 'CFO Test Person',
+        email: 'cfo@example.com',
+      });
+      
+      const company = await worldModel.createEntity('COMPANY', {
+        name: 'CFO Test Corp',
+        revenue: 10000000,
+      });
+
+      // Create a relationship with historical dates (e.g., CFO from 2014-2024)
+      const historicalStart = '2014-05-01T00:00:00Z';
+      
+      const relationship = await worldModel.linkEntities(
+        person.id,
+        'EMPLOYED_BY',
+        company.id,
+        { title: 'CFO' },
+        historicalStart,
+      );
+
+      expect(relationship.validAt).toBe(historicalStart);
+      expect(relationship.relationType).toBe('EMPLOYED_BY');
+
+      // Now invalidate it at a specific historical date
+      const historicalEnd = '2024-12-31T00:00:00Z';
+      const success = await worldModel.invalidate(relationship.id, historicalEnd);
+      
+      expect(success).toBe(true);
+
+      // Query the relationship - it should not be visible after the invalidAt date
+      const relationships = await worldModel.getRelationships(person.id, 'OUTGOING', '2025-06-01T00:00:00Z');
+      const found = relationships.find(r => r.id === relationship.id);
+      expect(found).toBeUndefined(); // Should not be visible after invalidAt
+
+      // But it should be visible before the invalidAt date
+      const relationshipsBeforeEnd = await worldModel.getRelationships(person.id, 'OUTGOING', '2024-06-01T00:00:00Z');
+      const foundBefore = relationshipsBeforeEnd.find(r => r.id === relationship.id);
+      expect(foundBefore).toBeDefined();
+      expect(foundBefore?.properties.title).toBe('CFO');
     });
   });
 

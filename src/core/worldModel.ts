@@ -220,13 +220,15 @@ export class WorldModel {
     properties?: Record<string, unknown>,
     validAt?: string,
   ): Promise<Relationship> {
-    const now = validAt ?? new Date().toISOString();
+    const relationshipValidAt = validAt ?? new Date().toISOString();
     const canonical = canonicalName(relationType);
 
-    // Fetch nodes to validate types
+    // Validate entities exist using CURRENT time (not historical validAt)
+    // This allows creating historical relationships for entities that exist now
+    const currentTime = new Date().toISOString();
     const [fromNode, toNode] = await Promise.all([
-      this.adapter.getNodeById(fromId, now),
-      this.adapter.getNodeById(toId, now),
+      this.adapter.getNodeById(fromId, currentTime),
+      this.adapter.getNodeById(toId, currentTime),
     ]);
 
     if (!fromNode) throw new Error(`From-node "${fromId}" not found.`);
@@ -240,7 +242,7 @@ export class WorldModel {
       fromId,
       toId,
       properties: properties ?? {},
-      validAt: now,
+      validAt: relationshipValidAt,
     });
   }
 

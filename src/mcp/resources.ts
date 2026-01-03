@@ -3,106 +3,66 @@
  * Provides browseable resources for agents to discover the world model.
  */
 
-import type { Resource } from '@modelcontextprotocol/sdk/types.js';
+import type { FastMCP } from 'fastmcp';
 import type { WorldModel } from '../core/worldModel.js';
 
 /**
- * Register available resources.
+ * Register all resources with the FastMCP server.
  */
-export async function registerResources(worldModel: WorldModel): Promise<Resource[]> {
-  const summary = await worldModel.getOntologySummary();
+export function registerResources(server: FastMCP, worldModel: WorldModel): void {
+  // Ontology Summary
+  server.addResource({
+    uri: 'worldmodel://ontology/summary',
+    name: 'Ontology Summary',
+    mimeType: 'application/json',
+    async load() {
+      const summary = await worldModel.getOntologySummary();
+      return {
+        text: JSON.stringify(
+          {
+            description: 'World model ontology summary',
+            counts: {
+              types: summary.typeCount,
+              relations: summary.relationCount,
+              lists: summary.listCount,
+            },
+            tips: [
+              'Use search_concepts to discover types and relations by meaning',
+              'Use get_type_info to see properties and relationships for a type',
+              'Use suggest_type when creating new entities if unsure of the type',
+            ],
+          },
+          null,
+          2,
+        ),
+      };
+    },
+  });
 
-  return [
-    {
-      uri: 'worldmodel://ontology/summary',
-      name: 'Ontology Summary',
-      description: `Overview of the world model (${summary.typeCount} types, ${summary.relationCount} relations, ${summary.listCount} lists)`,
-      mimeType: 'application/json',
+  // Filter Examples
+  server.addResource({
+    uri: 'worldmodel://help/filter-examples',
+    name: 'FilterDSL Examples',
+    mimeType: 'application/json',
+    async load() {
+      return { text: getFilterExamplesContent() };
     },
-    {
-      uri: 'worldmodel://help/filter-examples',
-      name: 'FilterDSL Examples',
-      description:
-        'Examples of FilterDSL syntax for composing queries. Essential cheat sheet for agents.',
-      mimeType: 'application/json',
+  });
+
+  // Getting Started Guide
+  server.addResource({
+    uri: 'worldmodel://help/getting-started',
+    name: 'Getting Started Guide',
+    mimeType: 'text/markdown',
+    async load() {
+      return { text: getGettingStartedContent() };
     },
-    {
-      uri: 'worldmodel://help/getting-started',
-      name: 'Getting Started Guide',
-      description: 'Quick start guide for interacting with the world model',
-      mimeType: 'text/markdown',
-    },
-  ];
+  });
 }
 
 /**
- * Handle resource read request.
+ * Helper function to generate filter examples content.
  */
-export async function handleResourceRead(
-  worldModel: WorldModel,
-  uri: string,
-): Promise<{ contents: Array<{ uri: string; mimeType: string; text: string }> }> {
-  switch (uri) {
-    case 'worldmodel://ontology/summary':
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'application/json',
-            text: await getOntologySummaryContent(worldModel),
-          },
-        ],
-      };
-
-    case 'worldmodel://help/filter-examples':
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'application/json',
-            text: getFilterExamplesContent(),
-          },
-        ],
-      };
-
-    case 'worldmodel://help/getting-started':
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'text/markdown',
-            text: getGettingStartedContent(),
-          },
-        ],
-      };
-
-    default:
-      throw new Error(`Unknown resource: ${uri}`);
-  }
-}
-
-async function getOntologySummaryContent(worldModel: WorldModel): Promise<string> {
-  const summary = await worldModel.getOntologySummary();
-
-  return JSON.stringify(
-    {
-      description: 'World model ontology summary',
-      counts: {
-        types: summary.typeCount,
-        relations: summary.relationCount,
-        lists: summary.listCount,
-      },
-      tips: [
-        'Use search_concepts to discover types and relations by meaning',
-        'Use get_type_info to see properties and relationships for a type',
-        'Use suggest_type when creating new entities if unsure of the type',
-      ],
-    },
-    null,
-    2,
-  );
-}
-
 function getFilterExamplesContent(): string {
   return JSON.stringify(
     {
@@ -166,10 +126,22 @@ function getFilterExamplesContent(): string {
   );
 }
 
+/**
+ * Helper function to generate getting started guide content.
+ */
 function getGettingStartedContent(): string {
   return `# World Model - Getting Started
 
-## Overview
+## What This Is
+
+This is a **world model** - a shared knowledge base designed for AI agents like you to:
+- **Reference**: Query existing knowledge about entities, relationships, and structures
+- **Use**: Store new information, create connections, and build understanding over time
+- **Explore**: Discover what exists through semantic search and graph traversal
+
+Think of it as your **persistent memory and knowledge graph**, accessible through MCP tools.
+
+## Core Components
 
 The world model is a temporal graph database with:
 - **Types**: Define what kinds of entities exist (PERSON, COMPANY, etc.)
@@ -224,6 +196,26 @@ create_entity("PERSON", { fullName: "Bob Smith", email: "bob@example.com" })
 link_entities("node:bob", "EMPLOYED_BY", "node:techcorp")
 \`\`\`
 
+### 6. Temporal Data (Historical Records)
+
+All data in the world model is temporal. Relationships support validity windows:
+
+\`\`\`
+// Create a relationship that started in the past
+link_entities("node:alice", "CFO_OF", "node:techcorp", validAt: "2020-01-15T00:00:00Z")
+
+// Create a relationship with a known end date (e.g., person stepped down)
+link_entities("node:alice", "CFO_OF", "node:techcorp", 
+  validAt: "2020-01-15T00:00:00Z",
+  invalidAt: "2024-12-31T00:00:00Z"
+)
+
+// End an existing relationship at a specific date
+invalidate_record("CFO_OF:abc123", invalidAt: "2024-12-31T00:00:00Z")
+\`\`\`
+
+Use temporal validity windows instead of creating "former_" relationship types.
+
 ## FilterDSL Tips
 
 Filters compose naturally:
@@ -255,6 +247,28 @@ Then query members:
 \`\`\`
 get_list_members("TECH_EMPLOYEES")
 \`\`\`
+
+## Best Practices for Agents
+
+### Use This as Your Knowledge Base
+- Store information you learn about entities and their relationships
+- Query before creating to avoid duplicates (use find_entities first)
+- Build upon existing structures rather than creating parallel ones
+
+### Semantic Discovery First
+- Always start with \`search_concepts\` to discover existing types and relations
+- Use \`suggest_type\` when unsure which entity type to use
+- Respect the existing ontology and extend it thoughtfully
+
+### Think Temporally
+- Use \`validAt\` and \`invalidAt\` for historical accuracy
+- Don't create "former_X" relationships - use temporal validity instead
+- Query with \`asOf\` parameters to understand state at specific times
+
+### Prefer Lists Over Hardcoded Sets
+- Define dynamic lists with filters rather than maintaining static ID collections
+- Lists automatically stay up-to-date as the graph changes
+- Use descriptive names and clear filter logic for maintainability
 `;
 }
 
