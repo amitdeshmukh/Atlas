@@ -2,9 +2,9 @@
 
 ## GraphQL Ontology, Temporal Graph & Lists Layer
 
-**Backend:** Fastify + GraphQL + Graph compatible database as storage layer
+**Backend:** Fastify + GraphQL + SurrealDB (pluggable storage)
 **Audience:** Backend / Platform Engineering
-**Status:** Final (v2) – Updated for Universal Traversal & Declarative Lists
+**Status:** Implemented (v3) – Updated for MCP Server & Layered Architecture
 
 ---
 
@@ -19,6 +19,8 @@ It is designed as a **"Shared Brain" for Humans and AI Agents**, enabling:
 * Declarative, dynamic lists (Predicates, not containers)
 * Native temporal modeling (`validAt` / `invalidAt`)
 * **Universal Traversal** ("Blind Walking" for Agents)
+* **Semantic Search** (Find types/relations by meaning)
+* **MCP Interface** (Tool-based access for LLM agents)
 
 ### Explicitly Out of Scope
 
@@ -37,23 +39,58 @@ It is designed as a **"Shared Brain" for Humans and AI Agents**, enabling:
 4.  **All ontology elements require descriptions:** AI cannot hallucinate meaning; it must read it.
 5.  **All state is temporal:** History is immutable; current state is a moving window.
 6.  **Nothing is ever silently deleted:** Deletion is strictly "invalidation" (closing the time window).
-7.  **GraphQL is the only public API:** No backdoors.
+7.  **GraphQL is the only public API:** No backdoors. (MCP wraps GraphQL logic)
 
 ---
 
 ## 3. High-Level Architecture
 
-```text
-Client (Agent / Service)
-       |
-       |  GraphQL (Queries + Mutations)
-       |
-Fastify GraphQL Server
-       |
-       |  (Resolvers handle Temporality & Logic)
-       |
-Graph Database as storage layer
-
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Interfaces Layer                            │
+│  ┌─────────────────────┐     ┌─────────────────────────────┐    │
+│  │   GraphQL Server    │     │       MCP Server            │    │
+│  │  (Fastify+Mercurius)│     │  (Model Context Protocol)   │    │
+│  └──────────┬──────────┘     └──────────────┬──────────────┘    │
+└─────────────┼───────────────────────────────┼───────────────────┘
+              │                               │
+              └───────────────┬───────────────┘
+                              │
+┌─────────────────────────────▼───────────────────────────────────┐
+│                        Core Layer                                │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                    WorldModel                            │    │
+│  │  - searchConcepts()    - findEntities()                 │    │
+│  │  - createEntity()      - linkEntities()                 │    │
+│  │  - defineList()        - findOntologyPaths()            │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌───────────────┐    │
+│  │ OntologyService │  │   ListService   │  │ FilterEvaluator│   │
+│  └─────────────────┘  └─────────────────┘  └───────────────┘    │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+┌─────────────────────────────▼───────────────────────────────────┐
+│                     Adapters Layer                               │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                StorageAdapter Interface                  │    │
+│  │  - Nodes: getNodeById, upsertNode, getNodesByType       │    │
+│  │  - Edges: getEdgesForNode, upsertEdge                   │    │
+│  │  - Lists: getListDefinition, upsertListDefinition       │    │
+│  │  - Ontology: getTypeByName, upsertTypeDef, etc.         │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│           │                    │                    │            │
+│  ┌────────▼────────┐  ┌───────▼────────┐  ┌───────▼────────┐   │
+│  │ SurrealAdapter  │  │  Neo4jAdapter  │  │PostgresAdapter │   │
+│  │   (current)     │  │   (future)     │  │   (future)     │   │
+│  └────────┬────────┘  └────────────────┘  └────────────────┘   │
+└───────────┼─────────────────────────────────────────────────────┘
+            │
+┌───────────▼─────────────────────────────────────────────────────┐
+│                         SurrealDB                                │
+│  - Nodes: `node` table                                          │
+│  - Edges: RELATE syntax (EMPLOYED_BY, PURCHASED, etc.)          │
+│  - Ontology: typeDef, relationTypeDef, allows_relation          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -62,23 +99,22 @@ Graph Database as storage layer
 
 Ontology defines **meaning**, not state. Ontology elements are **not temporal**.
 
-### 4.1 Ontology Nodes
+### 4.1 Ontology Storage
 
-| Label | Purpose |
+| Table | Purpose |
 | --- | --- |
-| `Type` | Declares object types (e.g., "CLIENT", "PRODUCT") |
-| `RelationType` | Declares relationship types (e.g., "PURCHASED", "EMPLOYED_BY") |
-| `Property` | Declares specific fields allowed on Types |
-| `BootstrapMeta` | Tracks system versioning |
+| `typeDef` | Declares object types (e.g., "PERSON", "COMPANY") with embedded properties |
+| `relationTypeDef` | Declares relationship types (e.g., "EMPLOYED_BY") with source/target types |
+| `allows_relation` | Edge table: Type → RelationType (via SurrealDB RELATE) |
+| `target_type` | Edge table: RelationType → Type (via SurrealDB RELATE) |
 
-### 4.2 Ontology Relationships
-
-```text
-(Type)-[:ALLOWS_RELATION]->(RelationType)
-(RelationType)-[:TARGET_TYPE]->(Type)
-(Type)-[:HAS_PROPERTY]->(Property)
+### 4.2 Ontology Graph Structure
 
 ```
+(typeDef:PERSON) --[allows_relation]--> (relationTypeDef:EMPLOYED_BY) --[target_type]--> (typeDef:COMPANY)
+```
+
+Properties are **embedded** in the `typeDef` record as an array, not stored in a separate table.
 
 ---
 
@@ -94,7 +130,6 @@ This enables the AI agent to "ground" itself by querying the meaning of data bef
 
 * Minimum length: 10 characters
 * No placeholders (`TODO`, `TBD`)
-* Must be included in Ontology Hashing
 * **Action:** Reject mutation if validation fails.
 
 ---
@@ -118,14 +153,13 @@ All **instance-level elements** (Nodes, Edges, List Definitions) MUST support te
   "validAt": "ISO-8601 timestamp (Required)",
   "invalidAt": "ISO-8601 timestamp | null"
 }
-
 ```
 
 **Logic:**
 
 * `validAt` marks the start of reality.
 * `invalidAt = null` means "currently true".
-* `validAt < invalidAt` is strictly enforced.
+* `validAt < invalidAt` is strictly enforced (validation error if violated).
 
 ---
 
@@ -137,13 +171,12 @@ Objects represent **what exists in the domain**.
 
 ```json
 {
-  "id": "company-123",
+  "id": "node:abc123",
   "type": "COMPANY",
-  "properties": { "revenue": 500000 },
+  "properties": { "name": "TechCorp", "revenue": 500000 },
   "validAt": "2023-01-01T00:00:00Z",
   "invalidAt": null
 }
-
 ```
 
 ### 8.2 Universal Traversal (The "Blind Walk" Requirement)
@@ -151,10 +184,10 @@ Objects represent **what exists in the domain**.
 To allow Agents to discover the world dynamically without knowing the schema, **every object MUST implement a generic traversal interface.**
 
 **Required GraphQL Resolver:**
-`node.relationships(asOf: Timestamp): [GraphEdge]`
+`node.relationships(direction: Direction, asOf: DateTime): [GraphEdge]`
 
 * Returns **ALL** edges connected to this node.
-* Includes `relationType`, `direction`, and the `otherNode`.
+* Includes `relationType`, `direction` (INCOMING/OUTGOING), and the `otherNode`.
 * This allows an agent to land on any node and ask "Where can I go from here?"
 
 ---
@@ -163,21 +196,28 @@ To allow Agents to discover the world dynamically without knowing the schema, **
 
 Relationships represent **facts between objects over time**.
 
-### Relationship Instance Model
+### 9.1 Edge Storage
+
+Edges are stored using SurrealDB's native `RELATE` syntax. Each relation type becomes its own edge table:
+
+```surrealql
+RELATE node:alice->EMPLOYED_BY->node:techcorp SET validAt = time::now();
+```
+
+### 9.2 Edge Instance Model
 
 ```json
 {
-  "id": "edge-456",
-  "relation": "EMPLOYED_BY",
-  "from": "person-1",
-  "to": "company-123",
+  "id": "EMPLOYED_BY:xyz789",
+  "relationType": "EMPLOYED_BY",
+  "fromId": "node:alice",
+  "toId": "node:techcorp",
   "validAt": "2021-06-01T00:00:00Z",
-  "invalidAt": "2024-03-31T23:59:59Z"
+  "invalidAt": null
 }
-
 ```
 
-* **Mutation Note:** Updating a relationship (e.g., changing metadata) is an **Invalidate + Create** operation.
+* **Mutation Note:** Updating a relationship is an **Invalidate + Create** operation.
 
 ---
 
@@ -191,7 +231,7 @@ Relationships represent **facts between objects over time**.
 
 * **Explicitly Forbidden:** `addToList(listId, objectId)`
 * **Explicitly Forbidden:** `removeFromList(listId, objectId)`
-* **Required Mutation:** `defineList(filter: FilterDSL)`
+* **Required Mutation:** `defineList(name, description, targetType, filter: FilterDSL)`
 
 Lists **never** store membership IDs. Membership is always computed dynamically at query time based on the `FilterDSL`. To "add" an item, you must update the object properties to match the filter, or update the filter to include the object.
 
@@ -210,9 +250,9 @@ Lists **never** store membership IDs. Membership is always computed dynamically 
 
 ---
 
-## 12. GraphQL API – Query Semantics
+## 12. GraphQL API – Queries
 
-### Global Rule
+### 12.1 Global Rule
 
 All data queries MAY accept an optional `asOf` timestamp.
 
@@ -222,96 +262,203 @@ All data queries MAY accept an optional `asOf` timestamp.
 For any Node or Edge to be returned, it must satisfy:
 `validAt <= asOf AND (invalidAt IS NULL OR invalidAt > asOf)`
 
+### 12.2 Discovery Queries
+
+| Query | Purpose |
+| --- | --- |
+| `searchOntology(query, limit)` | Semantic search over types, relations, AND lists by description |
+| `type(name)` | Get type details including properties and relations |
+| `relation(name)` | Get relation type details |
+| `list(name, asOf)` | Get specific list by name and evaluate members |
+| `ontologySummary` | Get counts (types, relations, lists) |
+| `suggestType(description, limit)` | Suggest best type for creating an entity |
+
+### 12.3 Path Finding Queries
+
+| Query | Purpose |
+| --- | --- |
+| `findOntologyPath(fromType, toType, maxDepth)` | Find how two types connect in the ontology |
+| `findInstancePath(fromNodeId, toNodeId, maxDepth)` | Find paths between specific entities |
+| `searchRelationships(nodeId, query, limit)` | Semantic search over a node's relationships |
+
+### 12.4 Data Queries
+
+| Query | Purpose |
+| --- | --- |
+| `nodes(type, filter, asOf, limit)` | Find entities of a type with optional filter |
+| `node(id, asOf)` | Get specific entity by ID |
+
 ---
 
-## 13. GraphQL API – Mutations & DSL
+## 13. GraphQL API – Mutations
 
-### 13.1 Generic Mutations
+### 13.1 Node Mutations
 
-To simplify the world model, use generic actions rather than specific ones.
+* `upsertNode(type, properties, id?, validAt?)`: Create or update a node.
+* `invalidate(id, invalidAt?)`: Soft delete a node or edge.
 
-* `upsertNode(type, properties, id?)`: Handles Create and Update.
-* `upsertEdge(type, from, to, properties?)`: Handles Link creation.
-* `invalidate(id)`: Handles Deletion (Soft Delete).
+### 13.2 Edge Mutations
 
-### 13.2 The Filter DSL
+* `upsertEdge(relationType, fromId, toId, properties?, validAt?)`: Create edge by IDs.
+* `upsertEdgeByNodeRef(relationType, from, to, properties?, validAt?)`: Create edge by node references (LLM-friendly).
 
-The system must expose a serializable DSL for defining List logic.
+**NodeRefInput:**
+```graphql
+input NodeRefInput {
+  id: ID              # Direct ID if known
+  type: String        # Type + key + value for lookup
+  key: String
+  value: JSON
+}
+```
+
+### 13.3 List Mutations
+
+* `defineList(name, description, targetType, filter)`: Define or update a list.
+
+### 13.4 Ontology Mutations
+
+* `upsertType(name, description)`: Create or update a type.
+* `upsertRelation(name, description, sourceType, targetType)`: Create or update a relation type.
+
+---
+
+## 14. The Filter DSL
+
+The system exposes a serializable DSL for defining List logic and query filters.
 
 ```graphql
 input FilterDSL {
-  operator: FilterOperator! # AND, OR, EQUALS, GT, HAS_RELATION
-  field: String
-  value: String
-  operands: [FilterDSL]     # For nested logic
-  relationType: String      # For graph-based filters
+  operator: FilterOperator!   # AND, OR, NOT, EQUALS, GT, LT, CONTAINS, HAS_RELATION
+  field: String               # For property comparisons
+  value: JSON                 # Value to compare against
+  operands: [FilterDSL]       # For nested logic (AND, OR, NOT)
+  relationType: String        # For HAS_RELATION
+  targetFilter: FilterDSL     # Filter on the related node (for HAS_RELATION)
 }
+```
 
+### 14.1 Filter Examples
+
+```graphql
+# Exact match
+{ operator: EQUALS, field: "email", value: "alice@example.com" }
+
+# Has relationship
+{ operator: HAS_RELATION, relationType: "EMPLOYED_BY" }
+
+# Has relationship to specific target
+{ operator: HAS_RELATION, relationType: "EMPLOYED_BY", 
+  targetFilter: { operator: CONTAINS, field: "name", value: "Tech" } }
+
+# Negation
+{ operator: NOT, operands: [{ operator: HAS_RELATION, relationType: "EMPLOYED_BY" }] }
 ```
 
 ---
 
-## 14. Ontology Hashing
+## 15. MCP Server (Agent Interface)
 
-### Scope
+The MCP (Model Context Protocol) server provides a tool-based interface for LLM agents.
 
-Hashing allows clients (Agents) to cache the schema safely.
+### 15.1 Discovery Tools
 
-**Included in Hash:**
+| Tool | Purpose |
+| --- | --- |
+| `search_concepts` | Semantic search over ontology |
+| `get_type_info` | Get type details (properties, relations) |
+| `suggest_type` | Suggest type for creating entities |
 
-* Type names + Descriptions
-* Relation names + Descriptions
-* Property definitions
-* List definitions (Filters + Descriptions)
+### 15.2 Query Tools
 
-**Excluded:**
+| Tool | Purpose |
+| --- | --- |
+| `find_entities` | Query nodes with filters |
+| `get_entity` | Get entity by ID |
+| `get_relationships` | Get relationships for an entity |
+| `find_path` | Find paths between entities |
 
-* Object instances (Data)
-* Temporal timestamps
-* IDs
+### 15.3 Mutation Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `create_entity` | Create a new entity |
+| `link_entities` | Create a relationship |
+| `define_list` | Define a dynamic list |
+| `get_list_members` | Get list members |
+
+### 15.4 Resources
+
+| URI | Description |
+| --- | --- |
+| `worldmodel://ontology/summary` | Ontology overview |
+| `worldmodel://help/filter-examples` | FilterDSL cheat sheet |
+| `worldmodel://help/getting-started` | Quick start guide |
 
 ---
 
-## 15. Bootstrap Ontology
+## 16. Bootstrap Ontology
 
 ### Requirements
 
-* May run at startup but not mandatory
-* Completes in < 100ms.
-* Idempotent (safe to run multiple times).
+* Optional at startup (controlled by `ONTOLOGY_BOOTSTRAP_ENABLED`)
+* Idempotent (safe to run multiple times)
+* Loads from JSON files in `ONTOLOGY_BOOTSTRAP_DIR`
 
-**Purpose:** 
-To bootstrap the ontology from a known starting structure. Can be empty if not defined as JSON files.
+**JSON Format:**
+```json
+{
+  "types": [
+    { "name": "PERSON", "description": "...", "properties": [...] }
+  ],
+  "relations": [
+    { "name": "EMPLOYED_BY", "description": "...", "sourceType": "PERSON", "targetType": "COMPANY" }
+  ]
+}
+```
+
 ---
 
-## 16. Performance Targets
+## 17. Semantic Search
 
-| Operation | Target |
+Types and relations are searchable by meaning using vector embeddings.
+
+* **Model:** all-MiniLM-L6-v2 (384 dimensions, runs locally)
+* **Indexed:** Description fields of types and relations
+* **Algorithm:** Cosine similarity
+
+---
+
+## 18. Ontology Validation
+
+All mutations are validated against the ontology:
+
+1. **Node creation:** Type must exist; properties must be defined for the type.
+2. **Edge creation:** RelationType must exist; source/target node types must match the relation's definition.
+3. **Descriptions:** Must be ≥10 characters, no TODO/TBD placeholders.
+4. **Temporal window:** `validAt < invalidAt` when both are present.
+
+---
+
+## 19. Deliverables (Implemented)
+
+| Component | Status |
 | --- | --- |
-| **Bootstrap** | < 100ms |
-| **Ontology Query** | < 10ms |
-| **List Evaluation** | < 25ms (requires efficient indexing of filters) |
-| **Graph Mutation** | < 15ms |
+| GraphQL SDL with universal traversal | ✓ Implemented |
+| Bootstrap Loader | ✓ Implemented |
+| Description Validators | ✓ Implemented |
+| Temporal Resolver | ✓ Implemented |
+| FilterDSL Evaluator with targetFilter | ✓ Implemented |
+| Agent Discovery Queries | ✓ Implemented |
+| MCP Server | ✓ Implemented |
+| Pluggable Storage Adapter | ✓ Implemented |
 
 ---
 
-## 17. Deliverables (Engineering)
+## 20. Success Criteria
 
-Engineering must deliver:
-
-1. **GraphQL SDL:** Implementing `interface Node`, `FilterDSL`, and generic `upsert`.
-2. **Bootstrap Loader:** To seed the ontology.
-3. **Validators:** For descriptions and DSL structure.
-4. **Temporal Resolver:** Middleware to enforce `asOf` logic globally.
-5. **Hash Generator:** For ontology caching.
-6. **Universal Resolver:** Implementation of the `relationships` field on all nodes.
-
----
-
-## 18. Success Criteria
-
-* **Full Data Dictionary:** Derivable purely via GraphQL introspection/ontology query.
+* **Full Data Dictionary:** Derivable purely via GraphQL/MCP queries.
 * **No Static Lists:** All grouping is dynamic.
 * **Historical Integrity:** Queries with `asOf="2024-01-01"` return legally accurate data for that moment.
 * **Agent Discoverability:** An agent can successfully navigate from a random node to a target goal using only `relationships` and `ontology` queries, without hardcoded paths.
-
+* **Semantic Discovery:** Agents can find relevant types/relations by describing what they're looking for.

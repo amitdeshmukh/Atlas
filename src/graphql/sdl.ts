@@ -1,3 +1,8 @@
+/**
+ * GraphQL Schema Definition Language (SDL) for AxOntology.
+ * Defines the public API surface for the world model.
+ */
+
 export const schemaSDL = /* GraphQL */ `
   scalar DateTime
   scalar JSON
@@ -80,6 +85,16 @@ export const schemaSDL = /* GraphQL */ `
     types: [TypeSearchHit!]!
     "Relations matching the query (by description similarity)"
     relations: [RelationSearchHit!]!
+    "Lists matching the query (by description similarity)"
+    lists: [ListSearchHit!]!
+  }
+
+  type ListSearchHit {
+    list: ListDefinition!
+    "Semantic similarity score (0-1)"
+    score: Float!
+    "Why this matched (relevant part of description)"
+    matchReason: String
   }
 
   type TypeSearchHit {
@@ -368,5 +383,4 @@ export const schemaSDL = /* GraphQL */ `
     ): RelationType!
   }
 `;
-
 

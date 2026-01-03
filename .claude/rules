@@ -1,0 +1,54 @@
+# AxOntology Project Rules
+
+## Testing & Examples Requirements
+
+### On Every Feature or Refactor
+When adding a new feature or refactoring existing code:
+
+1. **Update Integration Tests**
+   - Add or update tests in `src/test/integration.test.ts`
+   - Ensure new functionality is covered by test cases
+   - Update existing tests if behavior changes
+   - Run `npm test` to verify all tests pass
+
+2. **Update Examples**
+   - Add relevant examples in `examples/` directory
+   - Update `examples/README.md` if adding new example categories
+   - If the feature involves GraphQL, add query examples in `examples/queries/`
+   - If the feature involves MCP, update `examples/mcp_examples.md`
+   - Ensure examples demonstrate the real-world usage of the feature
+
+3. **Update Documentation**
+   - Update the main `README.md` if the feature affects the public API or usage
+   - Update relevant design docs in `design_docs/` if architectural changes are made
+   - Update `design_docs/DSL.md` if DSL syntax or semantics change
+   - Update the PRD (`design_docs/Product Requirements Document (PRD).md`) if requirements change
+
+## Documentation Standards
+
+- Keep documentation synchronized with code changes
+- Include code examples in documentation when explaining features
+- Document breaking changes prominently
+- Update API documentation for any interface changes
+
+## Code Quality
+
+- Follow existing patterns in the codebase
+- Keep the adapter pattern consistent (`src/adapters/`)
+- Maintain separation between core logic (`src/core/`) and GraphQL layer (`src/graphql/`)
+- Ensure MCP server implementations follow the established patterns (`src/mcp/`)
+
+## Testing Standards
+
+- All new features must have integration tests
+- Tests should be comprehensive and cover edge cases
+- Use the test helpers in `src/test/testHelpers.ts` for consistency
+- Ensure tests are maintainable and well-documented
+
+## Before Completing Any Task
+
+Always verify:
+- [ ] Tests added/updated and passing
+- [ ] Examples added/updated
+- [ ] Documentation updated
+- [ ] Code follows project patterns

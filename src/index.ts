@@ -1,50 +1,47 @@
-import Fastify from 'fastify';
-import mercurius from 'mercurius';
+/**
+ * AxOntology - Entry Point
+ *
+ * Starts the GraphQL server and optionally the MCP server.
+ * Uses the new layered architecture with WorldModel and StorageAdapter.
+ */
+
 import cors from '@fastify/cors';
-import { schemaSDL } from './schema/sdl.js';
-import { buildResolvers } from './schema/resolvers.js';
-import { createSurrealGraphDbAdapter } from './storage/surrealAdapter.js';
+import { createStorageAdapter } from './adapters/index.js';
+import { WorldModel } from './core/worldModel.js';
+import { createGraphQLServer, startGraphQLServer } from './graphql/server.js';
 import { runOntologyBootstrap } from './bootstrap/ontologyBootstrap.js';
 import { getServerConfig } from './config.js';
 
 async function main() {
-  const fastify = Fastify({
-    logger: true,
-  });
+  // Create storage adapter (defaults to SurrealDB)
+  const adapter = createStorageAdapter('surreal');
 
-  await fastify.register(cors, {
-    origin: true,
-  });
+  // Create world model with the adapter
+  const worldModel = new WorldModel(adapter);
 
   // Optional ontology bootstrap (idempotent, may be empty)
   await runOntologyBootstrap();
 
-  const adapter = createSurrealGraphDbAdapter();
-  const resolvers = buildResolvers(adapter) as any;
-
-  await fastify.register(mercurius, {
-    schema: schemaSDL,
-    resolvers,
-    graphiql: true,
-    context: (request) => {
-      // Global default asOf = NOW(), but queries can override via args
-      const now = new Date();
-      return {
-        asOf: now.toISOString(),
-        request,
-        graphDb: adapter,
-      };
-    },
+  // Create and configure GraphQL server
+  const app = await createGraphQLServer({
+    worldModel,
+    adapter,
   });
 
+  // Register CORS
+  await app.register(cors, {
+    origin: true,
+  });
+
+  // Start the server
   const { port } = getServerConfig();
-  await fastify.listen({ port, host: '0.0.0.0' });
+  await startGraphQLServer(app, '0.0.0.0', port);
+
+  console.log(`[GraphQL] Server running at http://localhost:${port}/graphql`);
+  console.log(`[GraphQL] GraphiQL available at http://localhost:${port}/graphiql`);
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error('Fatal error starting server', err);
   process.exit(1);
 });
-
-
