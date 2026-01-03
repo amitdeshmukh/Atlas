@@ -4,7 +4,7 @@
  */
 
 import { Surreal } from 'surrealdb';
-import { getSurrealConfig } from '../../config.js';
+import { getSurrealConfig, type SurrealConfig } from '../../config.js';
 import { cosineSimilarity, embedText } from '../../embeddings/embeddingService.js';
 import type { StorageAdapter } from '../types.js';
 import type {
@@ -24,14 +24,15 @@ import { canonicalName } from '../../core/types.js';
 
 /**
  * Creates a SurrealDB storage adapter.
+ * @param config - Optional configuration (if not provided, uses environment variables)
  */
-export function createSurrealAdapter(): StorageAdapter {
+export function createSurrealAdapter(config?: SurrealConfig): StorageAdapter {
   const db = new Surreal();
   let isConnected = false;
 
   async function ensureConnection(): Promise<void> {
     if (isConnected) return;
-    const surreal = getSurrealConfig();
+    const surreal = config || getSurrealConfig();
 
     await db.connect(surreal.url);
     await db.signin({

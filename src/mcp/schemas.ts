@@ -60,7 +60,7 @@ export const FindEntitiesSchema = z.object({
   filter: FilterDSLSchema.optional().describe(
     'Optional FilterDSL object to filter results. ' +
       'IMPORTANT: Pass as a JSON object, NOT a string. ' +
-      'Example: {"operator": "CONTAINS", "field": "NAME", "value": "Alice"}',
+      'Example: {"operator": "CONTAINS", "field": "name", "value": "Alice"}',
   ),
   limit: z.number().default(100).describe('Maximum number of results (default: 100)'),
 });
@@ -157,7 +157,7 @@ export const InvalidateRecordSchema = z.object({
 // === Ontology Mutation Tools ===
 
 export const PropertyDefSchema = z.object({
-  name: z.string().describe('Property name in UPPER_SNAKE_CASE (e.g., "NAME", "RELEASE_DATE")'),
+  name: z.string().describe('Property name in camelCase (e.g., "name", "releaseDate", "emailAddress")'),
   description: z.string().describe('Human-readable description of the property'),
   dataType: z
     .enum(['STRING', 'NUMBER', 'BOOLEAN', 'DATE'])
