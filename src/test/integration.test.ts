@@ -1089,6 +1089,132 @@ describe('Integration Tests', () => {
       );
       expect(personHit).toBeDefined();
     });
+
+    it('should find lists by semantic search', async () => {
+      // First, define a list
+      await graphqlQuery(
+        ctx.app,
+        `
+        mutation {
+          defineList(
+            name: "ACTIVE_WORKERS"
+            description: "People who are currently employed and working at companies"
+            targetType: "PERSON"
+            filter: { operator: HAS_RELATION, relationType: "EMPLOYED_BY" }
+          ) { name }
+        }
+        `,
+      );
+
+      // Search for it by meaning
+      const result = await graphqlQuery<{
+        searchOntology: {
+          lists: Array<{
+            list: { name: string; description: string; targetType: string };
+            score: number;
+          }>;
+        };
+      }>(
+        ctx.app,
+        `
+        query {
+          searchOntology(query: "employed workers at companies") {
+            lists {
+              list {
+                name
+                description
+                targetType
+              }
+              score
+            }
+          }
+        }
+        `,
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.searchOntology.lists.length).toBeGreaterThan(0);
+      const listHit = result.data?.searchOntology.lists.find(
+        (l) => l.list.name === 'ACTIVE_WORKERS',
+      );
+      expect(listHit).toBeDefined();
+      expect(listHit!.list.targetType).toBe('PERSON');
+    });
+
+    it('should get a specific list by name and evaluate members', async () => {
+      // Define a list
+      await graphqlQuery(
+        ctx.app,
+        `
+        mutation {
+          defineList(
+            name: "EMPLOYED_PEOPLE"
+            description: "People who have an employment relationship"
+            targetType: "PERSON"
+            filter: { operator: HAS_RELATION, relationType: "EMPLOYED_BY" }
+          ) { name }
+        }
+        `,
+      );
+
+      // Create a person and company, link them
+      const setupResult = await graphqlQuery<{
+        person: { id: string };
+        company: { id: string };
+      }>(
+        ctx.app,
+        `
+        mutation {
+          person: upsertNode(type: "PERSON", properties: { fullName: "List Test Person", email: "listtest@example.com" }) { id }
+          company: upsertNode(type: "COMPANY", properties: { name: "List Test Corp", revenue: 100000 }) { id }
+        }
+        `,
+      );
+
+      const personId = setupResult.data!.person.id;
+      const companyId = setupResult.data!.company.id;
+
+      await graphqlQuery(
+        ctx.app,
+        `
+        mutation($fromId: ID!, $toId: ID!) {
+          upsertEdge(relationType: "EMPLOYED_BY", fromId: $fromId, toId: $toId) { id }
+        }
+        `,
+        { fromId: personId, toId: companyId },
+      );
+
+      // Query the list
+      const result = await graphqlQuery<{
+        list: {
+          name: string;
+          description: string;
+          members: Array<{ id: string; properties: Record<string, unknown> }>;
+        };
+      }>(
+        ctx.app,
+        `
+        query {
+          list(name: "EMPLOYED_PEOPLE") {
+            name
+            description
+            members {
+              id
+              properties
+            }
+          }
+        }
+        `,
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.list).toBeDefined();
+      expect(result.data!.list.name).toBe('EMPLOYED_PEOPLE');
+      
+      // The person we created should be in the list
+      const member = result.data!.list.members.find((m) => m.id === personId);
+      expect(member).toBeDefined();
+    });
   });
 
   describe('Agent Discovery Queries', () => {

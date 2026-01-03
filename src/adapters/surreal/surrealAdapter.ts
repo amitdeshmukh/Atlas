@@ -1,15 +1,12 @@
 /**
- * Test helpers for AxOntology integration tests.
+ * SurrealDB storage adapter implementation.
+ * Implements the full StorageAdapter interface for SurrealDB.
  */
 
 import { Surreal } from 'surrealdb';
-import Fastify from 'fastify';
-import mercurius from 'mercurius';
-import { runOntologyBootstrap } from '../bootstrap/ontologyBootstrap.js';
-import { WorldModel } from '../core/worldModel.js';
-import { schemaSDL } from '../graphql/sdl.js';
-import { buildResolvers } from '../graphql/resolvers.js';
-import type { StorageAdapter } from '../adapters/types.js';
+import { getSurrealConfig } from '../../config.js';
+import { cosineSimilarity, embedText } from '../../embeddings/embeddingService.js';
+import type { StorageAdapter } from '../types.js';
 import type {
   Entity,
   Relationship,
@@ -22,45 +19,39 @@ import type {
   OntologyPath,
   InstancePath,
   Direction,
-} from '../core/types.js';
-import { canonicalName } from '../core/types.js';
-import { cosineSimilarity, embedText } from '../embeddings/embeddingService.js';
-
-// =============================================================================
-// Test Adapter
-// =============================================================================
-
-function fromNodeRecord(rec: any): Entity {
-  return {
-    id: String(rec.id),
-    type: rec.type,
-    properties: rec.properties ?? {},
-    validAt: rec.validAt,
-    invalidAt: rec.invalidAt ?? null,
-  };
-}
-
-function fromRelateEdgeRecord(rec: any, relationType: string): Relationship {
-  return {
-    id: String(rec.id),
-    relationType,
-    fromId: String(rec.fromId ?? rec.in),
-    toId: String(rec.toId ?? rec.out),
-    properties: rec.properties ?? {},
-    validAt: rec.validAt,
-    invalidAt: rec.invalidAt ?? null,
-  };
-}
+} from '../../core/types.js';
+import { canonicalName } from '../../core/types.js';
 
 /**
- * Creates a test adapter for SurrealDB that implements StorageAdapter.
+ * Creates a SurrealDB storage adapter.
  */
-function createTestAdapter(db: Surreal): StorageAdapter {
-  // -------------------------------------------------------------------------
+export function createSurrealAdapter(): StorageAdapter {
+  const db = new Surreal();
+  let isConnected = false;
+
+  async function ensureConnection(): Promise<void> {
+    if (isConnected) return;
+    const surreal = getSurrealConfig();
+
+    await db.connect(surreal.url);
+    await db.signin({
+      username: surreal.username,
+      password: surreal.password,
+    });
+    await db.use({
+      namespace: surreal.namespace,
+      database: surreal.database,
+    });
+
+    isConnected = true;
+  }
+
+  // ===========================================================================
   // Node Operations
-  // -------------------------------------------------------------------------
+  // ===========================================================================
 
   async function getNodeById(id: string, asOf: string): Promise<Entity | null> {
+    await ensureConnection();
     const [rows] = (await db.query(
       /* surrealql */ `
       SELECT * FROM type::thing($id)
@@ -80,6 +71,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     asOf: string,
     limit: number,
   ): Promise<Entity[]> {
+    await ensureConnection();
     const [rows] = (await db.query(
       /* surrealql */ `
       SELECT * FROM node
@@ -100,6 +92,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     validAt: string;
     invalidAt?: string | null;
   }): Promise<Entity> {
+    await ensureConnection();
     const id = input.id ?? undefined;
     const validAt = input.validAt;
 
@@ -126,6 +119,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
   }
 
   async function invalidateRecord(id: string, invalidAt: string): Promise<boolean> {
+    await ensureConnection();
     const [rows] = (await db.query(
       /* surrealql */ `
       UPDATE type::thing($id) SET invalidAt = $invalidAt
@@ -136,15 +130,17 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     return (rows ?? []).length > 0;
   }
 
-  // -------------------------------------------------------------------------
+  // ===========================================================================
   // Edge Operations
-  // -------------------------------------------------------------------------
+  // ===========================================================================
 
   async function getEdgesForNode(
     nodeId: string,
     direction: Direction,
     asOf: string,
   ): Promise<Relationship[]> {
+    await ensureConnection();
+
     const [relTypes] = (await db.query(
       /* surrealql */ `SELECT name FROM relationTypeDef;`,
     )) as any[];
@@ -205,6 +201,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     properties?: Record<string, unknown>;
     validAt: string;
   }): Promise<Relationship> {
+    await ensureConnection();
     const validAt = input.validAt;
     const relationType = canonicalName(input.relationType);
 
@@ -235,18 +232,20 @@ function createTestAdapter(db: Surreal): StorageAdapter {
       },
     )) as any[];
 
-    const created = results[3]?.[0];
+    const relateResult = results[3];
+    const created = relateResult?.[0];
     return fromRelateEdgeRecord(created, relationType);
   }
 
-  // -------------------------------------------------------------------------
+  // ===========================================================================
   // List Operations
-  // -------------------------------------------------------------------------
+  // ===========================================================================
 
   async function getListDefinitionByName(
     name: string,
     asOf: string,
   ): Promise<ListDefinition | null> {
+    await ensureConnection();
     const [rows] = (await db.query(
       /* surrealql */ `
       SELECT * FROM listDefinition
@@ -258,17 +257,8 @@ function createTestAdapter(db: Surreal): StorageAdapter {
       `,
       { name, asOf },
     )) as any[];
-
     if (!rows?.[0]) return null;
-    const rec = rows[0];
-    return {
-      name: rec.name,
-      description: rec.description,
-      targetType: rec.targetType,
-      filter: rec.filter,
-      validAt: rec.validAt,
-      invalidAt: rec.invalidAt ?? null,
-    };
+    return fromListRecord(rows[0]);
   }
 
   async function upsertListDefinition(input: {
@@ -279,6 +269,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     validAt: string;
     invalidAt?: string | null;
   }): Promise<ListDefinition> {
+    await ensureConnection();
     const validAt = input.validAt;
 
     await db.query(
@@ -300,21 +291,15 @@ function createTestAdapter(db: Surreal): StorageAdapter {
       invalidAt: input.invalidAt ?? null,
     })) as any[];
 
-    return {
-      name: createRes.name,
-      description: createRes.description,
-      targetType: createRes.targetType,
-      filter: createRes.filter,
-      validAt: createRes.validAt,
-      invalidAt: createRes.invalidAt ?? null,
-    };
+    return fromListRecord(createRes);
   }
 
-  // -------------------------------------------------------------------------
+  // ===========================================================================
   // Ontology Operations
-  // -------------------------------------------------------------------------
+  // ===========================================================================
 
   async function getTypeByName(name: string): Promise<TypeDef | null> {
+    await ensureConnection();
     const upper = canonicalName(name);
     const [rows] = (await db.query(
       /* surrealql */ `
@@ -338,6 +323,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
   }
 
   async function getRelationByName(name: string): Promise<RelationTypeDef | null> {
+    await ensureConnection();
     const upper = canonicalName(name);
     const [rows] = (await db.query(
       /* surrealql */ `
@@ -358,6 +344,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
   }
 
   async function getPropertiesForType(typeName: string): Promise<PropertyDef[]> {
+    await ensureConnection();
     const [rows] = (await db.query(
       /* surrealql */ `
       SELECT properties
@@ -379,6 +366,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
   async function getOutgoingRelationsForType(
     typeName: string,
   ): Promise<RelationTypeDef[]> {
+    await ensureConnection();
     const [rows] = (await db.query(
       /* surrealql */ `
       SELECT ->allows_relation->relationTypeDef.* AS rels
@@ -399,6 +387,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
   async function getIncomingRelationsForType(
     typeName: string,
   ): Promise<RelationTypeDef[]> {
+    await ensureConnection();
     const [rows] = (await db.query(
       /* surrealql */ `
       SELECT <-target_type<-relationTypeDef.* AS rels
@@ -421,14 +410,23 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     description: string,
     properties?: PropertyDef[],
   ): Promise<TypeDef> {
+    await ensureConnection();
     const canonical = canonicalName(name);
     await db.query(
       /* surrealql */ `
       UPSERT typeDef:${canonical} SET name = $name, description = $description, properties = $properties;
       `,
-      { name: canonical, description, properties: properties ?? [] },
+      {
+        name: canonical,
+        description,
+        properties: properties ?? [],
+      },
     );
-    return { name: canonical, description, properties };
+    return {
+      name: canonical,
+      description,
+      properties,
+    };
   }
 
   async function upsertRelationTypeDef(
@@ -437,6 +435,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     sourceType: string,
     targetType: string,
   ): Promise<RelationTypeDef> {
+    await ensureConnection();
     const canonical = canonicalName(name);
     const source = canonicalName(sourceType);
     const target = canonicalName(targetType);
@@ -449,9 +448,15 @@ function createTestAdapter(db: Surreal): StorageAdapter {
           sourceType = $sourceType,
           targetType = $targetType;
       `,
-      { name: canonical, description, sourceType: source, targetType: target },
+      {
+        name: canonical,
+        description,
+        sourceType: source,
+        targetType: target,
+      },
     );
 
+    // Maintain ontology graph edges
     await db.query(
       /* surrealql */ `
       LET $src = type::thing('typeDef', $sourceType);
@@ -464,10 +469,19 @@ function createTestAdapter(db: Surreal): StorageAdapter {
       DELETE target_type WHERE in = $rel AND out = $tgt;
       RELATE $rel->target_type->$tgt;
       `,
-      { sourceType: source, targetType: target, name: canonical },
+      {
+        sourceType: source,
+        targetType: target,
+        name: canonical,
+      },
     );
 
-    return { name: canonical, description, sourceType: source, targetType: target };
+    return {
+      name: canonical,
+      description,
+      sourceType: source,
+      targetType: target,
+    };
   }
 
   async function searchOntology(
@@ -479,7 +493,9 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     relations: Array<{ relation: RelationTypeDef; score: number; matchReason?: string }>;
     lists: Array<{ list: ListDefinition; score: number; matchReason?: string }>;
   }> {
+    await ensureConnection();
     const now = asOf ?? new Date().toISOString();
+    
     const [typesRows, relsRows, listsRows] = (await db.query(
       /* surrealql */ `
       SELECT * FROM typeDef;
@@ -546,14 +562,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
         const emb = await embedText(desc);
         const score = cosineSimilarity(queryEmbedding, emb);
         return {
-          list: {
-            name: l.name,
-            description: l.description,
-            targetType: l.targetType,
-            filter: l.filter,
-            validAt: l.validAt,
-            invalidAt: l.invalidAt ?? null,
-          },
+          list: fromListRecord(l),
           score,
           matchReason: l.description,
         };
@@ -571,15 +580,16 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     };
   }
 
-  // -------------------------------------------------------------------------
+  // ===========================================================================
   // Path Finding
-  // -------------------------------------------------------------------------
+  // ===========================================================================
 
   async function findOntologyPaths(
     fromType: string,
     toType: string,
     maxDepth: number,
   ): Promise<OntologyPath[]> {
+    await ensureConnection();
     const from = canonicalName(fromType);
     const to = canonicalName(toType);
 
@@ -587,6 +597,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
       return [{ steps: [], pathDescription: `${from} (same type)`, depth: 0 }];
     }
 
+    // Get all relations for building adjacency
     const [results] = (await db.query(
       /* surrealql */ `
       SELECT name, description, sourceType, targetType
@@ -601,6 +612,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
       targetType: r.targetType,
     }));
 
+    // Build adjacency maps
     const outgoingMap = new Map<
       string,
       Array<{ relation: RelationTypeDef; targetType: string }>
@@ -640,8 +652,10 @@ function createTestAdapter(db: Surreal): StorageAdapter {
 
     while (queue.length > 0) {
       const item = queue.shift()!;
+
       if (item.steps.length >= maxDepth) continue;
 
+      // Try outgoing relations
       const outgoing = outgoingMap.get(item.currentType) ?? [];
       for (const { relation, targetType } of outgoing) {
         if (item.visitedTypes.has(targetType)) continue;
@@ -668,6 +682,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
         }
       }
 
+      // Try incoming relations (reverse traversal)
       const incoming = incomingMap.get(item.currentType) ?? [];
       for (const { relation, sourceType } of incoming) {
         if (item.visitedTypes.has(sourceType)) continue;
@@ -709,6 +724,9 @@ function createTestAdapter(db: Surreal): StorageAdapter {
       return [{ edges: [], pathDescription: `${fromNodeId} (same node)`, depth: 0 }];
     }
 
+    await ensureConnection();
+
+    // Get all relation type names
     const [relTypeRows] = (await db.query(
       /* surrealql */ `SELECT name FROM relationTypeDef;`,
     )) as any[];
@@ -773,6 +791,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
 
     while (queue.length > 0 && paths.length < 10) {
       const item = queue.shift()!;
+
       if (item.edgePath.length >= maxDepth) continue;
 
       const edges = await getEdgesForNodeBFS(item.currentNode);
@@ -803,11 +822,12 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     return paths;
   }
 
-  // -------------------------------------------------------------------------
+  // ===========================================================================
   // Summary
-  // -------------------------------------------------------------------------
+  // ===========================================================================
 
   async function getOntologySummary(): Promise<OntologySummary> {
+    await ensureConnection();
     const [typesRows, relsRows, listsRows] = (await db.query(
       /* surrealql */ `
       SELECT count() AS typeCount FROM typeDef GROUP ALL;
@@ -823,19 +843,26 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     return { typeCount, relationCount, listCount };
   }
 
-  // -------------------------------------------------------------------------
+  // ===========================================================================
   // Return the adapter
-  // -------------------------------------------------------------------------
+  // ===========================================================================
 
   return {
+    // Nodes
     getNodeById,
     getNodesByType,
     upsertNode,
     invalidateRecord,
+
+    // Edges
     getEdgesForNode,
     upsertEdge,
+
+    // Lists
     getListDefinitionByName,
     upsertListDefinition,
+
+    // Ontology
     getTypeByName,
     getRelationByName,
     getPropertiesForType,
@@ -846,179 +873,46 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     searchOntology,
     findOntologyPaths,
     findInstancePaths,
+
+    // Summary
     getOntologySummary,
   };
 }
 
 // =============================================================================
-// Test Context
+// Helper Functions
 // =============================================================================
 
-export interface TestContext {
-  db: Surreal;
-  adapter: StorageAdapter;
-  worldModel: WorldModel;
-  app: ReturnType<typeof Fastify>;
-  namespace: string;
-  database: string;
+function fromNodeRecord(row: any): Entity {
+  return {
+    id: String(row.id),
+    type: row.type,
+    properties: row.properties ?? {},
+    validAt: row.validAt,
+    invalidAt: row.invalidAt ?? null,
+  };
 }
 
-/**
- * Set up a test database with bootstrap.
- * Uses a unique namespace/database per test run to avoid conflicts.
- */
-export async function setupTestDatabase(bootstrapEnabled = true): Promise<TestContext> {
-  const timestamp = Date.now();
-  const namespace = `test_${timestamp}`;
-  const database = `test_${timestamp}`;
-
-  const url = process.env.SURREAL_URL ?? 'http://127.0.0.1:8000/rpc';
-  const username = process.env.SURREAL_USER ?? '';
-  const password = process.env.SURREAL_PASS ?? '';
-
-  // Save original env vars
-  const originalNs = process.env.SURREAL_NS;
-  const originalDb = process.env.SURREAL_DB;
-  const originalBootstrapEnabled = process.env.ONTOLOGY_BOOTSTRAP_ENABLED;
-  const originalBootstrapDir = process.env.ONTOLOGY_BOOTSTRAP_DIR;
-
-  // Set test database in env (for ontology functions)
-  process.env.SURREAL_NS = namespace;
-  process.env.SURREAL_DB = database;
-
-  const db = new Surreal();
-  await db.connect(url);
-  await db.signin({ username, password });
-  await db.use({ namespace, database });
-
-  if (bootstrapEnabled) {
-    process.env.ONTOLOGY_BOOTSTRAP_ENABLED = 'true';
-    process.env.ONTOLOGY_BOOTSTRAP_DIR =
-      process.env.ONTOLOGY_BOOTSTRAP_DIR ?? './examples/bootstrap_ontologies';
-    await runOntologyBootstrap();
-  }
-
-  // Restore original env (but keep test NS/DB for the test context)
-  if (originalBootstrapEnabled !== undefined) {
-    process.env.ONTOLOGY_BOOTSTRAP_ENABLED = originalBootstrapEnabled;
-  } else {
-    delete process.env.ONTOLOGY_BOOTSTRAP_ENABLED;
-  }
-  if (originalBootstrapDir !== undefined) {
-    process.env.ONTOLOGY_BOOTSTRAP_DIR = originalBootstrapDir;
-  } else {
-    delete process.env.ONTOLOGY_BOOTSTRAP_DIR;
-  }
-
-  const adapter = createTestAdapter(db);
-  const worldModel = new WorldModel(adapter);
-
-  const app = Fastify({ logger: false });
-  const resolvers = buildResolvers(worldModel, adapter) as any;
-
-  await app.register(mercurius, {
-    schema: schemaSDL,
-    resolvers,
-    context: () => ({
-      asOf: new Date().toISOString(),
-      worldModel,
-      adapter,
-    }),
-  });
-
-  return { db, adapter, worldModel, app, namespace, database };
+function fromRelateEdgeRecord(row: any, relationType: string): Relationship {
+  return {
+    id: String(row.id),
+    relationType,
+    fromId: String(row.fromId ?? row.in),
+    toId: String(row.toId ?? row.out),
+    properties: row.properties ?? {},
+    validAt: row.validAt,
+    invalidAt: row.invalidAt ?? null,
+  };
 }
 
-/**
- * Clean up test database and namespace
- */
-export async function teardownTestDatabase(ctx: TestContext): Promise<void> {
-  console.log(
-    `[Teardown] Cleaning up test namespace: ${ctx.namespace}, database: ${ctx.database}`,
-  );
-
-  try {
-    await ctx.db.use({
-      namespace: ctx.namespace,
-      database: ctx.database,
-    });
-
-    try {
-      await ctx.db.query(`REMOVE DATABASE ${ctx.database}`);
-      console.log(`[Teardown] Removed database: ${ctx.database}`);
-    } catch (err: any) {
-      if (!err.message?.includes('does not exist')) {
-        console.warn(`[Teardown] Failed to remove database ${ctx.database}:`, err.message);
-      }
-    }
-
-    const url = process.env.SURREAL_URL ?? 'http://127.0.0.1:8000/rpc';
-    const username = process.env.SURREAL_USER ?? '';
-    const password = process.env.SURREAL_PASS ?? '';
-
-    const tempDb = new Surreal();
-    try {
-      await tempDb.connect(url);
-      await tempDb.signin({ username, password });
-
-      try {
-        await tempDb.query(`REMOVE NAMESPACE ${ctx.namespace}`);
-        console.log(`[Teardown] Removed namespace: ${ctx.namespace}`);
-      } catch (err: any) {
-        if (!err.message?.includes('does not exist')) {
-          console.warn(
-            `[Teardown] Failed to remove namespace ${ctx.namespace}:`,
-            err.message,
-          );
-        }
-      }
-
-      await tempDb.close();
-    } catch (err) {
-      console.warn('[Teardown] Error creating temp connection for namespace removal:', err);
-    }
-  } catch (err) {
-    console.warn('[Teardown] Error during teardown:', err);
-  } finally {
-    try {
-      await ctx.db.close();
-    } catch {
-      // Ignore close errors
-    }
-
-    try {
-      await ctx.app.close();
-    } catch {
-      // Ignore close errors
-    }
-
-    if (process.env.SURREAL_NS === ctx.namespace) {
-      delete process.env.SURREAL_NS;
-    }
-    if (process.env.SURREAL_DB === ctx.database) {
-      delete process.env.SURREAL_DB;
-    }
-
-    console.log(`[Teardown] Cleanup complete for ${ctx.namespace}/${ctx.database}`);
-  }
+function fromListRecord(row: any): ListDefinition {
+  return {
+    name: row.name,
+    description: row.description,
+    targetType: row.targetType,
+    filter: row.filter as FilterDSL,
+    validAt: row.validAt,
+    invalidAt: row.invalidAt ?? null,
+  };
 }
 
-/**
- * Execute a GraphQL query against the test server
- */
-export async function graphqlQuery<T = unknown>(
-  app: ReturnType<typeof Fastify>,
-  query: string,
-  variables?: Record<string, unknown>,
-): Promise<{ data?: T; errors?: unknown[] }> {
-  const response = await app.inject({
-    method: 'POST',
-    url: '/graphql',
-    payload: {
-      query,
-      variables,
-    },
-  });
-
-  return JSON.parse(response.body);
-}

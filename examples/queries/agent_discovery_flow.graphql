@@ -115,6 +115,8 @@ mutation LinkPersonToCompany {
   ) {
     id
     relationType
+    fromNode { id type properties }
+    toNode { id type properties }
     validAt
   }
 }

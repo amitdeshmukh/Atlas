@@ -240,3 +240,58 @@ mutation DefineExampleEmployeesWithExampleEmail {
   }
 }
 
+# -----------------------------------------------------------------------------
+# STEP 4: DISCOVER LISTS BY MEANING (Semantic Search)
+# -----------------------------------------------------------------------------
+# Lists are searchable via searchOntology just like types and relations.
+# Agent asks: "Do we have lists about employment?" or "shippable products?"
+
+query FindListsByMeaning {
+  searchOntology(query: "people who are employed at companies") {
+    lists {
+      list {
+        name
+        description
+        targetType
+        filter {
+          operator
+          relationType
+        }
+      }
+      score
+      matchReason
+    }
+  }
+}
+
+# Search for lists related to "unemployed" or "not working"
+query FindUnemployedLists {
+  searchOntology(query: "people without jobs not employed") {
+    lists {
+      list {
+        name
+        description
+        targetType
+      }
+      score
+    }
+  }
+}
+
+# After discovering a list, get it by exact name
+query GetSpecificList {
+  list(name: "EMPLOYED_PEOPLE") {
+    name
+    description
+    definitionUsed {
+      operator
+      relationType
+    }
+    members {
+      id
+      type
+      properties
+    }
+  }
+}
+
