@@ -187,6 +187,26 @@ create_entity("PERSON", { fullName: "Bob Smith", email: "bob@example.com" })
 link_entities("node:bob", "EMPLOYED_BY", "node:techcorp")
 \`\`\`
 
+### 6. Temporal Data (Historical Records)
+
+All data in the world model is temporal. Relationships support validity windows:
+
+\`\`\`
+// Create a relationship that started in the past
+link_entities("node:alice", "CFO_OF", "node:techcorp", validAt: "2020-01-15T00:00:00Z")
+
+// Create a relationship with a known end date (e.g., person stepped down)
+link_entities("node:alice", "CFO_OF", "node:techcorp", 
+  validAt: "2020-01-15T00:00:00Z",
+  invalidAt: "2024-12-31T00:00:00Z"
+)
+
+// End an existing relationship at a specific date
+invalidate_record("CFO_OF:abc123", invalidAt: "2024-12-31T00:00:00Z")
+\`\`\`
+
+Use temporal validity windows instead of creating "former_" relationship types.
+
 ## FilterDSL Tips
 
 Filters compose naturally:

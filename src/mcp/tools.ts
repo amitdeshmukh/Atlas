@@ -16,6 +16,7 @@ import {
   FindPathSchema,
   CreateEntitySchema,
   LinkEntitiesSchema,
+  InvalidateRecordSchema,
   DefineListSchema,
   GetListMembersSchema,
   GetFilterExamplesSchema,
@@ -136,7 +137,8 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     name: 'link_entities',
     description:
       'Create a relationship between two entities. ' +
-      'Use search_concepts to discover valid relation types.',
+      'Use search_concepts to discover valid relation types. ' +
+      'Supports temporal validity windows via validAt/invalidAt for historical data.',
     parameters: LinkEntitiesSchema,
     execute: async (args) => {
       const result = await worldModel.linkEntities(
@@ -144,8 +146,28 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
         args.relationType,
         args.toId,
         args.properties,
+        args.validAt,
       );
+      // If invalidAt is provided, immediately invalidate the relationship
+      if (args.invalidAt) {
+        await worldModel.invalidate(result.id, args.invalidAt);
+        return JSON.stringify({ ...result, invalidAt: args.invalidAt }, null, 2);
+      }
       return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'invalidate_record',
+    description:
+      'End the validity of an entity or relationship by setting its invalidAt timestamp. ' +
+      'Use this to record when something stopped being true (e.g., person left company). ' +
+      'Supports historical dates for backdating.',
+    parameters: InvalidateRecordSchema,
+    execute: async (args) => {
+      const invalidAt = args.invalidAt ?? new Date().toISOString();
+      const success = await worldModel.invalidate(args.id, invalidAt);
+      return JSON.stringify({ success, id: args.id, invalidAt }, null, 2);
     },
   });
 

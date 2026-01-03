@@ -88,6 +88,14 @@ export const LinkEntitiesSchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('Optional properties for the relationship'),
+  validAt: z
+    .string()
+    .optional()
+    .describe('ISO timestamp when this relationship became valid (default: now)'),
+  invalidAt: z
+    .string()
+    .optional()
+    .describe('ISO timestamp when this relationship ended (default: null = still active)'),
 });
 
 // === List Tools ===
@@ -101,6 +109,16 @@ export const DefineListSchema = z.object({
 
 export const GetListMembersSchema = z.object({
   name: z.string().describe('Name of the list to evaluate'),
+});
+
+// === Temporal Tools ===
+
+export const InvalidateRecordSchema = z.object({
+  id: z.string().describe('ID of the entity or relationship to invalidate'),
+  invalidAt: z
+    .string()
+    .optional()
+    .describe('ISO timestamp when the record became invalid (default: now)'),
 });
 
 // === Help Tool ===
