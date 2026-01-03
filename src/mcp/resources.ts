@@ -3,106 +3,66 @@
  * Provides browseable resources for agents to discover the world model.
  */
 
-import type { Resource } from '@modelcontextprotocol/sdk/types.js';
+import type { FastMCP } from 'fastmcp';
 import type { WorldModel } from '../core/worldModel.js';
 
 /**
- * Register available resources.
+ * Register all resources with the FastMCP server.
  */
-export async function registerResources(worldModel: WorldModel): Promise<Resource[]> {
-  const summary = await worldModel.getOntologySummary();
+export function registerResources(server: FastMCP, worldModel: WorldModel): void {
+  // Ontology Summary
+  server.addResource({
+    uri: 'worldmodel://ontology/summary',
+    name: 'Ontology Summary',
+    mimeType: 'application/json',
+    async load() {
+      const summary = await worldModel.getOntologySummary();
+      return {
+        text: JSON.stringify(
+          {
+            description: 'World model ontology summary',
+            counts: {
+              types: summary.typeCount,
+              relations: summary.relationCount,
+              lists: summary.listCount,
+            },
+            tips: [
+              'Use search_concepts to discover types and relations by meaning',
+              'Use get_type_info to see properties and relationships for a type',
+              'Use suggest_type when creating new entities if unsure of the type',
+            ],
+          },
+          null,
+          2,
+        ),
+      };
+    },
+  });
 
-  return [
-    {
-      uri: 'worldmodel://ontology/summary',
-      name: 'Ontology Summary',
-      description: `Overview of the world model (${summary.typeCount} types, ${summary.relationCount} relations, ${summary.listCount} lists)`,
-      mimeType: 'application/json',
+  // Filter Examples
+  server.addResource({
+    uri: 'worldmodel://help/filter-examples',
+    name: 'FilterDSL Examples',
+    mimeType: 'application/json',
+    async load() {
+      return { text: getFilterExamplesContent() };
     },
-    {
-      uri: 'worldmodel://help/filter-examples',
-      name: 'FilterDSL Examples',
-      description:
-        'Examples of FilterDSL syntax for composing queries. Essential cheat sheet for agents.',
-      mimeType: 'application/json',
+  });
+
+  // Getting Started Guide
+  server.addResource({
+    uri: 'worldmodel://help/getting-started',
+    name: 'Getting Started Guide',
+    mimeType: 'text/markdown',
+    async load() {
+      return { text: getGettingStartedContent() };
     },
-    {
-      uri: 'worldmodel://help/getting-started',
-      name: 'Getting Started Guide',
-      description: 'Quick start guide for interacting with the world model',
-      mimeType: 'text/markdown',
-    },
-  ];
+  });
 }
 
 /**
- * Handle resource read request.
+ * Helper function to generate filter examples content.
  */
-export async function handleResourceRead(
-  worldModel: WorldModel,
-  uri: string,
-): Promise<{ contents: Array<{ uri: string; mimeType: string; text: string }> }> {
-  switch (uri) {
-    case 'worldmodel://ontology/summary':
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'application/json',
-            text: await getOntologySummaryContent(worldModel),
-          },
-        ],
-      };
-
-    case 'worldmodel://help/filter-examples':
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'application/json',
-            text: getFilterExamplesContent(),
-          },
-        ],
-      };
-
-    case 'worldmodel://help/getting-started':
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'text/markdown',
-            text: getGettingStartedContent(),
-          },
-        ],
-      };
-
-    default:
-      throw new Error(`Unknown resource: ${uri}`);
-  }
-}
-
-async function getOntologySummaryContent(worldModel: WorldModel): Promise<string> {
-  const summary = await worldModel.getOntologySummary();
-
-  return JSON.stringify(
-    {
-      description: 'World model ontology summary',
-      counts: {
-        types: summary.typeCount,
-        relations: summary.relationCount,
-        lists: summary.listCount,
-      },
-      tips: [
-        'Use search_concepts to discover types and relations by meaning',
-        'Use get_type_info to see properties and relationships for a type',
-        'Use suggest_type when creating new entities if unsure of the type',
-      ],
-    },
-    null,
-    2,
-  );
-}
-
 function getFilterExamplesContent(): string {
   return JSON.stringify(
     {
@@ -166,6 +126,9 @@ function getFilterExamplesContent(): string {
   );
 }
 
+/**
+ * Helper function to generate getting started guide content.
+ */
 function getGettingStartedContent(): string {
   return `# World Model - Getting Started
 

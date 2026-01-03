@@ -3,62 +3,29 @@
  * Provides a tool-based interface for LLM agents to interact with the world model.
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { FastMCP } from 'fastmcp';
 import type { WorldModel } from '../core/worldModel.js';
-import { registerTools, handleToolCall } from './tools.js';
-import { registerResources, handleResourceRead } from './resources.js';
+import { registerTools } from './tools.js';
+import { registerResources } from './resources.js';
 
 export interface MCPServerOptions {
   worldModel: WorldModel;
 }
 
 /**
- * Creates and starts the MCP server.
+ * Creates the MCP server with all tools and resources registered.
  */
-export async function createMCPServer(options: MCPServerOptions): Promise<Server> {
+export function createMCPServer(options: MCPServerOptions): FastMCP {
   const { worldModel } = options;
 
-  const server = new Server(
-    {
-      name: 'axontology',
-      version: '1.0.0',
-    },
-    {
-      capabilities: {
-        tools: {},
-        resources: {},
-      },
-    },
-  );
-
-  // Register tool handlers
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: registerTools(),
-    };
+  const server = new FastMCP({
+    name: 'axontology',
+    version: '1.0.0',
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    return handleToolCall(worldModel, request.params.name, request.params.arguments ?? {});
-  });
-
-  // Register resource handlers
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return {
-      resources: await registerResources(worldModel),
-    };
-  });
-
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    return handleResourceRead(worldModel, request.params.uri);
-  });
+  // Register tools and resources
+  registerTools(server, worldModel);
+  registerResources(server, worldModel);
 
   return server;
 }
@@ -66,9 +33,8 @@ export async function createMCPServer(options: MCPServerOptions): Promise<Server
 /**
  * Starts the MCP server with stdio transport.
  */
-export async function startMCPServer(server: Server): Promise<void> {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+export function startMCPServer(server: FastMCP): void {
+  server.start({ transportType: 'stdio' });
   console.error('[MCP] Server started');
 }
 
