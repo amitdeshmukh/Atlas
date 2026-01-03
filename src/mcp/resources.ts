@@ -132,7 +132,16 @@ function getFilterExamplesContent(): string {
 function getGettingStartedContent(): string {
   return `# World Model - Getting Started
 
-## Overview
+## What This Is
+
+This is a **world model** - a shared knowledge base designed for AI agents like you to:
+- **Reference**: Query existing knowledge about entities, relationships, and structures
+- **Use**: Store new information, create connections, and build understanding over time
+- **Explore**: Discover what exists through semantic search and graph traversal
+
+Think of it as your **persistent memory and knowledge graph**, accessible through MCP tools.
+
+## Core Components
 
 The world model is a temporal graph database with:
 - **Types**: Define what kinds of entities exist (PERSON, COMPANY, etc.)
@@ -238,6 +247,28 @@ Then query members:
 \`\`\`
 get_list_members("TECH_EMPLOYEES")
 \`\`\`
+
+## Best Practices for Agents
+
+### Use This as Your Knowledge Base
+- Store information you learn about entities and their relationships
+- Query before creating to avoid duplicates (use find_entities first)
+- Build upon existing structures rather than creating parallel ones
+
+### Semantic Discovery First
+- Always start with \`search_concepts\` to discover existing types and relations
+- Use \`suggest_type\` when unsure which entity type to use
+- Respect the existing ontology and extend it thoughtfully
+
+### Think Temporally
+- Use \`validAt\` and \`invalidAt\` for historical accuracy
+- Don't create "former_X" relationships - use temporal validity instead
+- Query with \`asOf\` parameters to understand state at specific times
+
+### Prefer Lists Over Hardcoded Sets
+- Define dynamic lists with filters rather than maintaining static ID collections
+- Lists automatically stay up-to-date as the graph changes
+- Use descriptive names and clear filter logic for maintainability
 `;
 }
 

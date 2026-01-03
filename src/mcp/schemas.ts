@@ -40,6 +40,14 @@ export const GetTypeInfoSchema = z.object({
   typeName: z.string().describe('The name of the type (e.g., "PERSON", "COMPANY")'),
 });
 
+export const GetRelationInfoSchema = z.object({
+  relationName: z.string().describe('The name of the relation (e.g., "EMPLOYED_BY")'),
+});
+
+export const GetOntologySummarySchema = z.object({
+  // No parameters required
+});
+
 export const SuggestTypeSchema = z.object({
   description: z.string().describe('Description of the entity you want to create'),
   limit: z.number().default(3).describe('Number of suggestions (default: 3)'),
@@ -71,6 +79,12 @@ export const FindPathSchema = z.object({
   maxDepth: z.number().default(3).describe('Maximum number of hops (default: 3)'),
 });
 
+export const FindOntologyPathsSchema = z.object({
+  fromType: z.string().describe('Starting type name (e.g., "PERSON")'),
+  toType: z.string().describe('Target type name (e.g., "COMPANY")'),
+  maxDepth: z.number().default(3).describe('Maximum number of hops (default: 3)'),
+});
+
 // === Mutation Tools ===
 
 export const CreateEntitySchema = z.object({
@@ -78,6 +92,13 @@ export const CreateEntitySchema = z.object({
   properties: z
     .record(z.string(), z.unknown())
     .describe('Properties for the entity (must match type definition)'),
+});
+
+export const UpdateEntitySchema = z.object({
+  id: z.string().describe('The entity ID to update'),
+  properties: z
+    .record(z.string(), z.unknown())
+    .describe('Properties to update (merged with existing properties)'),
 });
 
 export const LinkEntitiesSchema = z.object({
@@ -111,6 +132,10 @@ export const GetListMembersSchema = z.object({
   name: z.string().describe('Name of the list to evaluate'),
 });
 
+export const GetListDefinitionSchema = z.object({
+  name: z.string().describe('Name of the list to retrieve'),
+});
+
 // === Temporal Tools ===
 
 export const InvalidateRecordSchema = z.object({
@@ -119,6 +144,28 @@ export const InvalidateRecordSchema = z.object({
     .string()
     .optional()
     .describe('ISO timestamp when the record became invalid (default: now)'),
+});
+
+// === Ontology Mutation Tools ===
+
+export const CreateTypeSchema = z.object({
+  name: z.string().describe('Name of the type in UPPER_SNAKE_CASE (e.g., "PRODUCT", "NEWS_ARTICLE")'),
+  description: z
+    .string()
+    .min(10)
+    .describe('Human-readable description of the type (min 10 chars)'),
+});
+
+export const CreateRelationTypeSchema = z.object({
+  name: z
+    .string()
+    .describe('Name of the relation in UPPER_SNAKE_CASE (e.g., "MADE_BY", "ANNOUNCED_AT")'),
+  description: z
+    .string()
+    .min(10)
+    .describe('Human-readable description of the relation (min 10 chars)'),
+  sourceType: z.string().describe('The type that this relation originates from (e.g., "PRODUCT")'),
+  targetType: z.string().describe('The type that this relation points to (e.g., "COMPANY")'),
 });
 
 // === Help Tool ===

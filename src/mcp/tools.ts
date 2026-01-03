@@ -9,17 +9,24 @@ import type { FilterDSL } from '../core/types.js';
 import {
   SearchConceptsSchema,
   GetTypeInfoSchema,
+  GetRelationInfoSchema,
+  GetOntologySummarySchema,
   SuggestTypeSchema,
   FindEntitiesSchema,
   GetEntitySchema,
   GetRelationshipsSchema,
   FindPathSchema,
+  FindOntologyPathsSchema,
   CreateEntitySchema,
+  UpdateEntitySchema,
   LinkEntitiesSchema,
   InvalidateRecordSchema,
   DefineListSchema,
   GetListMembersSchema,
+  GetListDefinitionSchema,
   GetFilterExamplesSchema,
+  CreateTypeSchema,
+  CreateRelationTypeSchema,
 } from './schemas.js';
 
 /**
@@ -46,6 +53,29 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     parameters: GetTypeInfoSchema,
     execute: async (args) => {
       const result = await worldModel.getTypeInfo(args.typeName);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'get_relation_info',
+    description:
+      'Get detailed information about a specific relation type including source and target types.',
+    parameters: GetRelationInfoSchema,
+    execute: async (args) => {
+      const result = await worldModel.getRelationInfo(args.relationName);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'get_ontology_summary',
+    description:
+      'Get a summary of the ontology showing counts of types, relations, and lists. ' +
+      'Useful for understanding the scope of the world model.',
+    parameters: GetOntologySummarySchema,
+    execute: async () => {
+      const result = await worldModel.getOntologySummary();
       return JSON.stringify(result, null, 2);
     },
   });
@@ -120,6 +150,23 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     },
   });
 
+  server.addTool({
+    name: 'find_ontology_paths',
+    description:
+      'Find how two types are connected in the ontology schema. ' +
+      'Useful for understanding possible relationships between types ' +
+      '(e.g., "How can PERSON connect to COMPANY?").',
+    parameters: FindOntologyPathsSchema,
+    execute: async (args) => {
+      const result = await worldModel.findOntologyPaths(
+        args.fromType,
+        args.toType,
+        args.maxDepth,
+      );
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
   // Mutation Tools
   server.addTool({
     name: 'create_entity',
@@ -129,6 +176,18 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     parameters: CreateEntitySchema,
     execute: async (args) => {
       const result = await worldModel.createEntity(args.type, args.properties);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'update_entity',
+    description:
+      'Update an existing entity\'s properties. ' +
+      'Properties are merged with existing values (partial update).',
+    parameters: UpdateEntitySchema,
+    execute: async (args) => {
+      const result = await worldModel.updateEntity(args.id, args.properties);
       return JSON.stringify(result, null, 2);
     },
   });
@@ -171,6 +230,36 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     },
   });
 
+  // Ontology Mutation Tools
+  server.addTool({
+    name: 'create_type',
+    description:
+      'Create a new type in the ontology. Use this to extend the schema with new entity types ' +
+      '(e.g., PRODUCT, NEWS_ARTICLE, EVENT). Types must have unique names in UPPER_SNAKE_CASE.',
+    parameters: CreateTypeSchema,
+    execute: async (args) => {
+      const result = await worldModel.upsertType(args.name, args.description);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'create_relation_type',
+    description:
+      'Create a new relation type in the ontology. Use this to define how types can connect ' +
+      '(e.g., PRODUCT --MADE_BY--> COMPANY). Both source and target types must already exist.',
+    parameters: CreateRelationTypeSchema,
+    execute: async (args) => {
+      const result = await worldModel.upsertRelationType(
+        args.name,
+        args.description,
+        args.sourceType,
+        args.targetType,
+      );
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
   // List Tools
   server.addTool({
     name: 'define_list',
@@ -195,6 +284,18 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     parameters: GetListMembersSchema,
     execute: async (args) => {
       const result = await worldModel.getListMembers(args.name);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'get_list_definition',
+    description:
+      'Get the definition of a list including its filter criteria. ' +
+      'Useful for inspecting what a list is filtering on.',
+    parameters: GetListDefinitionSchema,
+    execute: async (args) => {
+      const result = await worldModel.getListDefinition(args.name);
       return JSON.stringify(result, null, 2);
     },
   });
@@ -278,18 +379,18 @@ function getFilterExamples() {
         description: 'Find entities that do NOT have an EMPLOYED_BY relationship',
       },
       {
-        name: 'Complex: Not employed at Tech companies',
+        name: 'Complex: Not employed at Google',
         filter: {
           operator: 'NOT',
           operands: [
             {
               operator: 'HAS_RELATION',
               relationType: 'EMPLOYED_BY',
-              targetFilter: { operator: 'CONTAINS', field: 'name', value: 'Tech' },
+              targetFilter: { operator: 'CONTAINS', field: 'name', value: 'Google' },
             },
           ],
         },
-        description: 'Find people NOT employed by companies with "Tech" in name',
+        description: 'Find people NOT employed by companies with "Google" in name',
       },
     ],
   };
