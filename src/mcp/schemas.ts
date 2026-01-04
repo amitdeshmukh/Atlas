@@ -86,7 +86,7 @@ export const GetInstanceEdgesSchema = z.object({
 export const FindInstancePathSchema = z.object({
   fromId: z.string().describe('Starting instance ID'),
   toId: z.string().describe('Target instance ID'),
-  maxDepth: z.number().default(3).describe('Maximum number of hops through edges (default: 3)'),
+  maxDepth: z.number().default(6).describe('Maximum number of hops through edges (default: 6)'),
 });
 
 // === Instance Mutation Tools (Data Layer) ===
