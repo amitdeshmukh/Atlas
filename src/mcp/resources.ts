@@ -27,11 +27,11 @@ export function registerResources(server: FastMCP, worldModel: WorldModel): void
               lists: summary.listCount,
             },
             tips: [
-              'Use search_concepts to discover types and relations by meaning',
-              'Use get_type_info or get_relation_info to see details about schema elements',
-              'Use get_ontology_summary to understand the scope of the world model',
-              'Use suggest_type when creating new entities if unsure of the type',
-              'Use create_type and create_relation_type to extend the ontology dynamically',
+              'Use search_ontology to discover types and relations by meaning',
+              'Use get_ontology_type or get_ontology_relation to see details about schema elements',
+              'Use find_ontology_paths to see how types CAN connect',
+              'Use find_instances to query actual data, then find_instance_path for connections',
+              'Use create_ontology_type and create_ontology_relation to extend the schema',
             ],
           },
           null,
@@ -77,7 +77,7 @@ function getFilterExamplesContent(): string {
         AND: 'All operands must match',
         OR: 'At least one operand must match',
         NOT: 'Negate the operands',
-        HAS_RELATION: 'Entity has a relationship of the specified type',
+        HAS_RELATION: 'Instance has an edge of the specified type',
       },
       examples: [
         {
@@ -93,7 +93,7 @@ function getFilterExamplesContent(): string {
           query: { operator: 'GT', field: 'revenue', value: 1000000 },
         },
         {
-          name: 'Has any EMPLOYED_BY relationship',
+          name: 'Has any EMPLOYED_BY edge',
           query: { operator: 'HAS_RELATION', relationType: 'EMPLOYED_BY' },
         },
         {
@@ -105,7 +105,7 @@ function getFilterExamplesContent(): string {
           },
         },
         {
-          name: 'NOT employed (no EMPLOYED_BY relationship)',
+          name: 'NOT employed (no EMPLOYED_BY edge)',
           query: {
             operator: 'NOT',
             operands: [{ operator: 'HAS_RELATION', relationType: 'EMPLOYED_BY' }],
@@ -134,121 +134,140 @@ function getFilterExamplesContent(): string {
 function getGettingStartedContent(): string {
   return `# World Model - Getting Started
 
-## What This Is
+## Two-Layer Architecture
 
-This is a **world model** - a shared knowledge base designed for AI agents like you to:
-- **Reference**: Query existing knowledge about entities, relationships, and structures
-- **Use**: Store new information, create connections, and build understanding over time
-- **Explore**: Discover what exists through semantic search and graph traversal
+The world model has **two distinct layers**:
 
-Think of it as your **persistent memory and knowledge graph**, accessible through MCP tools.
+| Layer | Contains | Tools |
+|-------|----------|-------|
+| **Ontology (Schema)** | Type definitions, relation types | \`search_ontology\`, \`get_ontology_type\`, \`get_ontology_relation\`, \`find_ontology_paths\` |
+| **Instances (Data)** | Actual nodes and edges | \`find_instances\`, \`get_instance\`, \`get_instance_edges\`, \`find_instance_path\` |
 
-## Core Components
+**Think of it like a database**: the ontology is the schema (table definitions), instances are the actual rows.
 
-The world model is a temporal graph database with:
-- **Types**: Define what kinds of entities exist (PERSON, COMPANY, etc.)
-- **Entities**: Actual instances (Alice, TechCorp)
-- **Relationships**: Connections between entities (Alice EMPLOYED_BY TechCorp)
-- **Lists**: Dynamic queries saved as predicates
+## Quick Reference
+
+### Ontology Tools (Schema Layer)
+- \`search_ontology("people who work at companies")\` → Find types/relations by meaning
+- \`get_ontology_type("PERSON")\` → See properties and relations for a type
+- \`get_ontology_relation("EMPLOYED_BY")\` → See what types a relation connects
+- \`find_ontology_paths("PERSON", "PRODUCT")\` → How CAN these types connect?
+
+### Instance Tools (Data Layer)
+- \`find_instances("PERSON", filter: {...})\` → Find actual people matching criteria
+- \`get_instance("node:abc123")\` → Get a specific node
+- \`get_instance_edges("node:abc123")\` → Get direct edges (1 hop)
+- \`find_instance_path("node:tim", "node:seattle")\` → How ARE these connected?
 
 ## Recommended Workflow
 
-### 1. Discover What Exists
+### 1. Explore the Ontology First
 
-Start by searching the ontology to understand what's in the world model:
-
-\`\`\`
-search_concepts("people who work at companies")
-\`\`\`
-
-This returns types and relations matching your intent.
-
-### 2. Explore Types and Relations
-
-Get details about a specific type or relation:
+Before querying data, understand what exists in the schema:
 
 \`\`\`
-get_type_info("PERSON")
-get_relation_info("EMPLOYED_BY")
-get_ontology_summary()  // See counts of types, relations, lists
+search_ontology("people and companies")
 \`\`\`
 
-Returns properties, outgoing relations, and incoming relations.
+This returns types (PERSON, COMPANY) and relations (EMPLOYED_BY) that match your intent.
 
-### 3. Find Entities
+### 2. Inspect Type Details
 
-Query for specific entities:
-
-\`\`\`
-find_entities("PERSON", filter: { operator: "CONTAINS", field: "name", value: "Alice" })
-\`\`\`
-
-### 4. Explore Connections
-
-Get relationships for an entity:
+Get specifics about a type:
 
 \`\`\`
-get_relationships("node:abc123")
+get_ontology_type("PERSON")
 \`\`\`
 
-### 5. Create New Data
+Returns properties (fullName, email) and what relations PERSON can have.
 
-Create entities and link them:
+### 3. Understand Type Connections
 
-\`\`\`
-create_entity("PERSON", { fullName: "Bob Smith", email: "bob@example.com" })
-link_entities("node:bob", "EMPLOYED_BY", "node:techcorp")
-\`\`\`
-
-Update an existing entity:
+Before querying instance paths, see how types CAN connect:
 
 \`\`\`
-update_entity("node:bob", { email: "bob.smith@example.com" })
+find_ontology_paths("PERSON", "PRODUCT")
 \`\`\`
 
-### 6. Extend the Ontology
+Might show: PERSON → COMPANY → PRODUCT
 
-Create new types with properties:
+### 4. Find Instances
+
+Query actual data:
 
 \`\`\`
-create_type("PRODUCT", "A product manufactured by a company", properties: [
-  { name: "NAME", description: "Product name", dataType: "STRING" },
-  { name: "CATEGORY", description: "Product category", dataType: "STRING" },
-  { name: "RELEASE_DATE", description: "Release date", dataType: "DATE" }
+find_instances("PERSON", filter: { operator: "CONTAINS", field: "name", value: "Tim" })
+\`\`\`
+
+### 5. Explore Instance Connections
+
+Get direct edges:
+\`\`\`
+get_instance_edges("node:tim_cook")
+\`\`\`
+
+Find indirect paths between any two instances:
+\`\`\`
+find_instance_path("node:tim_cook", "node:seattle")
+\`\`\`
+
+## Creating Data
+
+### Create Instances
+
+\`\`\`
+create_instance("PERSON", { fullName: "Bob Smith", email: "bob@example.com" })
+\`\`\`
+
+### Create Edges Between Instances
+
+\`\`\`
+create_edge("node:bob", "EMPLOYED_BY", "node:techcorp")
+\`\`\`
+
+### Update Existing Instances
+
+\`\`\`
+update_instance("node:bob", { email: "bob.smith@example.com" })
+\`\`\`
+
+## Extending the Ontology
+
+### Create New Types
+
+\`\`\`
+create_ontology_type("PRODUCT", "A product manufactured by a company", properties: [
+  { name: "name", description: "Product name", dataType: "STRING" },
+  { name: "category", description: "Product category", dataType: "STRING" },
+  { name: "releaseDate", description: "Release date", dataType: "DATE" }
 ])
 \`\`\`
 
-Create relations between types:
+### Create New Relation Types
 
 \`\`\`
-create_relation_type("MADE_BY", "Product manufactured by company", "PRODUCT", "COMPANY")
+create_ontology_relation("MADE_BY", "Product manufactured by company", "PRODUCT", "COMPANY")
 \`\`\`
 
-Find how types connect:
+## Temporal Data (Historical Records)
+
+All data supports temporal validity. Edges can have validity windows:
 
 \`\`\`
-find_ontology_paths("PRODUCT", "PERSON")
-\`\`\`
+// Create an edge that started in the past
+create_edge("node:alice", "CFO_OF", "node:techcorp", validAt: "2020-01-15T00:00:00Z")
 
-### 7. Temporal Data (Historical Records)
-
-All data in the world model is temporal. Relationships support validity windows:
-
-\`\`\`
-// Create a relationship that started in the past
-link_entities("node:alice", "CFO_OF", "node:techcorp", validAt: "2020-01-15T00:00:00Z")
-
-// Create a relationship with a known end date (e.g., person stepped down)
-link_entities("node:alice", "CFO_OF", "node:techcorp", 
+// Create an edge with a known end date (e.g., person stepped down)
+create_edge("node:alice", "CFO_OF", "node:techcorp", 
   validAt: "2020-01-15T00:00:00Z",
   invalidAt: "2024-12-31T00:00:00Z"
 )
 
-// End an existing relationship at a specific date
-invalidate_record("CFO_OF:abc123", invalidAt: "2024-12-31T00:00:00Z")
+// End an existing edge at a specific date
+invalidate("edge:abc123", invalidAt: "2024-12-31T00:00:00Z")
 \`\`\`
 
-Use temporal validity windows instead of creating "former_" relationship types.
+Use temporal validity windows instead of creating "former_" relation types.
 
 ## FilterDSL Tips
 
@@ -256,20 +275,20 @@ Use temporal validity windows instead of creating "former_" relationship types.
 
 \`\`\`
 // CORRECT - filter as object:
-find_entities("PERSON", filter: { operator: "CONTAINS", field: "FULLNAME", value: "Alice" })
+find_instances("PERSON", filter: { operator: "CONTAINS", field: "name", value: "Alice" })
 
 // WRONG - filter as string (will fail validation):
-find_entities("PERSON", filter: "{\\"operator\\": \\"CONTAINS\\", ...}")
+find_instances("PERSON", filter: "{\\"operator\\": \\"CONTAINS\\", ...}")
 \`\`\`
 
 Filters compose naturally:
 - Use AND/OR/NOT for logic
-- Use HAS_RELATION to filter by connections
-- Add targetFilter to filter the related entity
+- Use HAS_RELATION to filter by edges
+- Add targetFilter to filter the connected instance
 
 See \`worldmodel://help/filter-examples\` for a complete cheat sheet.
 
-## Lists
+## Lists (Dynamic Queries)
 
 Lists are saved filters that evaluate at query time:
 
@@ -286,59 +305,33 @@ define_list(
 )
 \`\`\`
 
-Then query members or inspect the definition:
-
+Query members:
 \`\`\`
 get_list_members("TECH_EMPLOYEES")
-get_list_definition("TECH_EMPLOYEES")  // See the filter criteria
 \`\`\`
 
-## Best Practices for Agents
+## Best Practices
 
-### Think in Graphs, Not Tables
-- Entities are connected through relationships - **traverse the graph**
-- Use \`find_path(fromId, toId)\` to discover how any two entities connect
-- Use \`get_relationships\` to explore an entity's connections
-- **Don't assume no direct relationship means no connection** - check indirect paths!
+### Ontology First, Then Instances
+1. \`search_ontology("topic")\` → What types/relations exist?
+2. \`find_ontology_paths("A", "B")\` → How CAN these types connect?
+3. \`find_instances(...)\` → Find actual data
+4. \`find_instance_path(...)\` → How ARE these instances connected?
 
-Example: "Is Alice connected to TechCorp?"
+### Think in Graphs
+- Use \`find_instance_path(fromId, toId)\` to discover how any two instances connect
+- **Don't assume no direct edge means no connection** - check indirect paths!
+
+Example: "Is Tim Cook connected to Seattle?"
 \`\`\`
-// Don't just check: get_relationships("node:alice") for direct EMPLOYED_BY
-// Do this: find_path("node:alice", "node:techcorp", maxDepth: 4)
-// This finds: Alice -> Company1 -> Partner -> TechCorp
+// Don't just check direct edges
+// Do this: find_instance_path("node:tim_cook", "node:seattle", maxDepth: 4)
+// This finds: Tim → Apple → Seattle Office
 \`\`\`
 
 ### Think Temporally
-- Relationships have \`validAt\` and \`invalidAt\` timestamps
+- Edges have \`validAt\` and \`invalidAt\` timestamps
 - Check these to understand WHEN relationships were true
 - "Was X involved in Y?" requires checking if their connection existed at the right time
-
-Example: "Was Luca involved in iPhone 17 launch?"
-\`\`\`
-1. find_path("node:luca", "node:iphone17")  // Find the connection
-2. Check each edge's temporal data:
-   - Luca --EMPLOYED_BY--> Apple (invalidAt: 2024-12-31)
-   - Apple --MANUFACTURES--> iPhone 17 (validAt: 2025-09-01)
-3. Luca left BEFORE iPhone 17 was created = NOT involved
-\`\`\`
-
-### Semantic Discovery First
-- Always start with \`search_concepts\` to discover existing types and relations
-- Use \`get_ontology_summary\` to understand the scope
-- Use \`find_ontology_paths\` to see how types CAN connect before querying instances
-- Use \`suggest_type\` when unsure which entity type to use
-
-### Query Strategy
-1. \`get_ontology_summary()\` - What exists?
-2. \`search_concepts("topic")\` - Find relevant types/relations
-3. \`find_ontology_paths("A", "B")\` - How can these types connect?
-4. \`find_entities()\` - Find specific instances
-5. \`find_path()\` - Trace connections between instances
-
-### Prefer Lists Over Hardcoded Sets
-- Define dynamic lists with filters rather than maintaining static ID collections
-- Lists automatically stay up-to-date as the graph changes
-- Use descriptive names and clear filter logic for maintainability
 `;
 }
-
