@@ -108,14 +108,15 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   server.addTool({
     name: 'find_instances',
     description:
-      'Find INSTANCES (actual data) of a given type, optionally filtered. ' +
+      'Find INSTANCES (actual data) of a given type with a REQUIRED filter. ' +
+      'Filter is mandatory because types can have billions of instances (e.g., 8B+ PERSON records globally). ' +
       'Example: find_instances("PERSON", filter: {"operator": "CONTAINS", "field": "name", "value": "Tim"}) ' +
       'returns actual people like Tim Cook. Filter must be a JSON object, not a string.',
     parameters: FindInstancesSchema,
     execute: async (args) => {
       const result = await worldModel.findEntities(
         args.type,
-        (args.filter as FilterDSL) ?? null,
+        args.filter as FilterDSL,
         undefined,
         args.limit,
       );

@@ -58,12 +58,13 @@ export const FindOntologyPathsSchema = z.object({
 
 export const FindInstancesSchema = z.object({
   type: z.string().describe('The type of instances to find (e.g., "PERSON")'),
-  filter: FilterDSLSchema.optional().describe(
-    'Optional FilterDSL object to filter results. ' +
+  filter: FilterDSLSchema.describe(
+    'REQUIRED FilterDSL object to filter results. ' +
+      'A filter is mandatory because types can have billions of instances. ' +
       'IMPORTANT: Pass as a JSON object, NOT a string. ' +
       'Example: {"operator": "CONTAINS", "field": "name", "value": "Alice"}',
   ),
-  limit: z.number().default(100).describe('Maximum number of results (default: 100)'),
+  limit: z.number().default(100).describe('Maximum number of results (default: 100, max recommended: 1000)'),
 });
 
 export const GetInstanceSchema = z.object({
