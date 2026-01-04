@@ -208,6 +208,36 @@ export class DataTransformer {
   }
 
   /**
+   * Mark historical elements (those with invalidAt in the past) with a CSS class
+   * This allows them to be styled differently without filtering them out
+   */
+  markHistoricalElements(elements) {
+    const now = new Date();
+
+    // Mark nodes that have ended
+    elements.nodes.forEach(node => {
+      if (node.data.invalidAt) {
+        const invalidAt = new Date(node.data.invalidAt);
+        if (invalidAt <= now) {
+          node.classes = (node.classes || '') + ' historical';
+        }
+      }
+    });
+
+    // Mark edges that have ended
+    elements.edges.forEach(edge => {
+      if (edge.data.invalidAt) {
+        const invalidAt = new Date(edge.data.invalidAt);
+        if (invalidAt <= now) {
+          edge.classes = (edge.classes || '') + ' historical';
+        }
+      }
+    });
+
+    return elements;
+  }
+
+  /**
    * Filter nodes by type
    */
   filterByTypes(elements, selectedTypes) {

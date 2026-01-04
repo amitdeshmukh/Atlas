@@ -140,10 +140,16 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     description:
       'Get DIRECT EDGES (one hop only) from an instance. ' +
       'For multi-hop connections between instances, use find_instance_path instead. ' +
-      'Returns edges with temporal data (validAt/invalidAt) for historical analysis.',
+      'Returns edges with temporal data (validAt/invalidAt) for historical analysis. ' +
+      'By default returns ALL edges including historical ones.',
     parameters: GetInstanceEdgesSchema,
     execute: async (args) => {
-      const result = await worldModel.getRelationships(args.instanceId, args.direction);
+      const result = await worldModel.getRelationships(
+        args.instanceId, 
+        args.direction, 
+        undefined, // asOf
+        args.includeHistorical,
+      );
       return JSON.stringify(result, null, 2);
     },
   });

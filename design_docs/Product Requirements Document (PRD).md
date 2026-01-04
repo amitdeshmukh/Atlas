@@ -197,11 +197,12 @@ Objects represent **what exists in the domain**.
 To allow Agents to discover the world dynamically without knowing the schema, **every object MUST implement a generic traversal interface.**
 
 **Required GraphQL Resolver:**
-`node.relationships(direction: Direction, asOf: DateTime): [GraphEdge]`
+`node.relationships(direction: Direction, asOf: DateTime, includeHistorical: Boolean = true): [GraphEdge]`
 
-* Returns **ALL** edges connected to this node.
+* Returns **ALL** edges connected to this node by default (including historical/past relationships).
 * Includes `relationType`, `direction` (INCOMING/OUTGOING), and the `otherNode`.
-* This allows an agent to land on any node and ask "Where can I go from here?"
+* This allows an agent to land on any node and ask "Where can I go from here?" including historical connections.
+* Set `includeHistorical: false` to filter to only currently-active relationships.
 
 ---
 
@@ -267,13 +268,17 @@ Lists **never** store membership IDs. Membership is always computed dynamically 
 
 ### 12.1 Global Rule
 
-All data queries MAY accept an optional `asOf` timestamp.
+All data queries MAY accept an optional `asOf` timestamp and `includeHistorical` flag.
 
-**Default:** `asOf = NOW()`
+**Defaults:**
+- `includeHistorical = true` (show ALL data including past records)
+- `asOf = NOW()` (only used when `includeHistorical = false`)
 
 **Logic:**
-For any Node or Edge to be returned, it must satisfy:
+When `includeHistorical = false`, for any Node or Edge to be returned, it must satisfy:
 `validAt <= asOf AND (invalidAt IS NULL OR invalidAt > asOf)`
+
+When `includeHistorical = true` (default), ALL records are returned regardless of their temporal state. This enables agents to see the complete history of the world model, including past relationships and invalidated entities.
 
 ### 12.2 Discovery Queries
 
@@ -472,6 +477,7 @@ All mutations are validated against the ontology:
 
 * **Full Data Dictionary:** Derivable purely via GraphQL/MCP queries.
 * **No Static Lists:** All grouping is dynamic.
-* **Historical Integrity:** Queries with `asOf="2024-01-01"` return legally accurate data for that moment.
-* **Agent Discoverability:** An agent can successfully navigate from a random node to a target goal using only `relationships` and `ontology` queries, without hardcoded paths.
+* **Complete History by Default:** All queries return the full history of the world model, enabling agents to understand how things have changed over time.
+* **Historical Filtering:** When `includeHistorical=false` and `asOf` is specified, queries return legally accurate data for that moment.
+* **Agent Discoverability:** An agent can successfully navigate from a random node to a target goal using only `relationships` and `ontology` queries, without hardcoded paths. Path finding includes historical relationships.
 * **Semantic Discovery:** Agents can find relevant types/relations by describing what they're looking for.

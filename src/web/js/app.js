@@ -26,6 +26,10 @@ class VisualizerApp {
     this.currentAsOf = null;
     this.currentElements = null;
     this.allTypes = [];
+    this.temporalFilterEnabled = false; // Default: show all relationships
+
+    // Temporal filter toggle
+    this.temporalFilterToggle = document.getElementById('temporal-filter-toggle');
 
     // Bind event handlers
     this.setupEventHandlers();
@@ -210,6 +214,17 @@ class VisualizerApp {
       this.handleTimeChange(asOf);
     });
 
+    // Temporal filter toggle
+    this.temporalFilterToggle.addEventListener('change', () => {
+      this.temporalFilterEnabled = this.temporalFilterToggle.checked;
+      console.log('[Atlas] Temporal filter:', this.temporalFilterEnabled ? 'enabled' : 'disabled');
+      
+      // Reload instance view if we're in it
+      if (this.currentView === 'instances') {
+        this.loadInstanceView();
+      }
+    });
+
     // Graph interaction events
     this.renderer.onNodeClick = (nodeData) => {
       this.handleNodeClick(nodeData);
@@ -272,18 +287,26 @@ class VisualizerApp {
     try {
       this.ui.showLoading('Loading instance data...');
 
-      const asOf = this.currentAsOf;
-      console.log('[Atlas] Loading instances with asOf:', asOf);
+      // When temporal filter is enabled, pass includeHistorical=false to filter by time
+      // When disabled (default), use includeHistorical=true (server default) to get ALL relationships
+      const includeHistorical = !this.temporalFilterEnabled;
+      const queryAsOf = this.temporalFilterEnabled ? this.currentAsOf : null;
       
-      const nodes = await this.client.fetchAllInstances(asOf, 100);
+      console.log('[Atlas] Loading instances:', {
+        includeHistorical,
+        asOf: queryAsOf || 'live',
+        temporalFilterEnabled: this.temporalFilterEnabled
+      });
+      
+      const nodes = await this.client.fetchAllInstances(queryAsOf, 100, includeHistorical);
 
       if (!nodes || nodes.length === 0) {
-        if (asOf) {
-          const selectedDate = new Date(asOf);
+        if (this.temporalFilterEnabled && this.currentAsOf) {
+          const selectedDate = new Date(this.currentAsOf);
           this.ui.showError(
             `No entities existed at ${selectedDate.toLocaleString()}. ` +
             `Entities are only visible when validAt ≤ selected time. ` +
-            `Click "LIVE" to see current data.`
+            `Click "LIVE" to see current data or disable "Filter by Time".`
           );
         } else {
           this.ui.showError('No instance data found. Create some entities using the GraphQL API or MCP server.');
@@ -294,9 +317,12 @@ class VisualizerApp {
       // Transform data to graph format
       let elements = this.transformer.transformInstancesToGraph(nodes);
 
-      // Apply temporal filter if needed
-      if (asOf) {
-        elements = this.transformer.applyTemporalFilter(elements, asOf);
+      // Apply temporal filter client-side if enabled
+      if (this.temporalFilterEnabled && this.currentAsOf) {
+        elements = this.transformer.applyTemporalFilter(elements, this.currentAsOf);
+      } else if (includeHistorical) {
+        // Mark historical (past) relationships for visual distinction
+        elements = this.transformer.markHistoricalElements(elements);
       }
 
       // Store current elements

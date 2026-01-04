@@ -442,12 +442,13 @@ export function buildResolvers(worldModel: WorldModel, adapter: StorageAdapter) 
     GenericNode: {
       async relationships(
         root: { id: string },
-        args: { direction?: Direction; asOf?: string | null },
+        args: { direction?: Direction; asOf?: string | null; includeHistorical?: boolean },
         ctx: ResolverContext,
       ) {
         const asOf = args.asOf ?? ctx.asOf;
         const direction = (args.direction ?? 'BOTH') as Direction;
-        const edges = await ctx.adapter.getEdgesForNode(root.id, direction, asOf);
+        const includeHistorical = args.includeHistorical ?? true; // Default to showing ALL relationships
+        const edges = await ctx.adapter.getEdgesForNode(root.id, direction, asOf, includeHistorical);
 
         return edges.map((edge) => ({
           id: edge.id,

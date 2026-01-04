@@ -17,7 +17,7 @@ All adapters must implement the `StorageAdapter` interface defined in `types.ts`
 - `invalidateRecord(id, invalidAt)` - Soft delete a record
 
 ### Edge Operations
-- `getEdgesForNode(nodeId, direction, asOf)` - Get edges connected to a node
+- `getEdgesForNode(nodeId, direction, asOf, includeHistorical?)` - Get edges connected to a node. When `includeHistorical=true`, returns ALL edges regardless of temporal validity.
 - `upsertEdge(input)` - Create or update an edge
 
 ### List Operations

@@ -115,16 +115,16 @@ export class GraphQLClient {
     return this.query(query, { typeName });
   }
 
-  async fetchInstancesByType(type, asOf = null, limit = 100) {
+  async fetchInstancesByType(type, asOf = null, limit = 100, includeHistorical = false) {
     const query = `
-      query($type: String!, $asOf: DateTime, $limit: Int) {
+      query($type: String!, $asOf: DateTime, $limit: Int, $includeHistorical: Boolean) {
         nodes(type: $type, asOf: $asOf, limit: $limit) {
           id
           type
           properties
           validAt
           invalidAt
-          relationships(asOf: $asOf) {
+          relationships(asOf: $asOf, includeHistorical: $includeHistorical) {
             id
             relationType
             direction
@@ -139,7 +139,7 @@ export class GraphQLClient {
         }
       }
     `;
-    return this.query(query, { type, asOf, limit });
+    return this.query(query, { type, asOf, limit, includeHistorical });
   }
 
   async fetchEntity(id, asOf = null) {
@@ -169,7 +169,7 @@ export class GraphQLClient {
     return this.query(query, { id, asOf });
   }
 
-  async fetchAllInstances(asOf = null, limit = 100) {
+  async fetchAllInstances(asOf = null, limit = 100, includeHistorical = false) {
     try {
       // First, fetch all types
       const typesData = await this.fetchAllTypes();
@@ -182,7 +182,7 @@ export class GraphQLClient {
       const typeNames = typesData.searchOntology.types.map(hit => hit.type.name);
 
       const instancePromises = typeNames.map(typeName =>
-        this.fetchInstancesByType(typeName, asOf, limit)
+        this.fetchInstancesByType(typeName, asOf, limit, includeHistorical)
           .then(result => result.nodes || [])
           .catch(error => {
             console.warn(`Failed to fetch instances for type ${typeName}:`, error);

@@ -139,6 +139,7 @@ export function createSurrealAdapter(config?: SurrealConfig): StorageAdapter {
     nodeId: string,
     direction: Direction,
     asOf: string,
+    includeHistorical: boolean = false,
   ): Promise<Relationship[]> {
     await ensureConnection();
 
@@ -158,29 +159,31 @@ export function createSurrealAdapter(config?: SurrealConfig): StorageAdapter {
       if (!/^[A-Z][A-Z0-9_]*$/.test(relType)) continue;
 
       let query: string;
+      // When includeHistorical is true, skip temporal filtering to return ALL edges
+      const temporalFilter = includeHistorical
+        ? ''
+        : 'AND validAt <= $asOf AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf)';
+
       if (direction === 'OUTGOING') {
         query = `
           SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
           FROM ${relType}
           WHERE in = type::thing($nodeId)
-            AND validAt <= $asOf
-            AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
+            ${temporalFilter};
         `;
       } else if (direction === 'INCOMING') {
         query = `
           SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
           FROM ${relType}
           WHERE out = type::thing($nodeId)
-            AND validAt <= $asOf
-            AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
+            ${temporalFilter};
         `;
       } else {
         query = `
           SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
           FROM ${relType}
           WHERE (in = type::thing($nodeId) OR out = type::thing($nodeId))
-            AND validAt <= $asOf
-            AND (invalidAt = NONE OR invalidAt = null OR invalidAt > $asOf);
+            ${temporalFilter};
         `;
       }
 
@@ -753,12 +756,12 @@ export function createSurrealAdapter(config?: SurrealConfig): StorageAdapter {
       for (const relType of relationTypes) {
         if (!/^[A-Z][A-Z0-9_]*$/.test(relType)) continue;
 
+        // Include ALL edges (including historical) for path finding
         const [rows] = (await db.query(
           /* surrealql */ `
           SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
           FROM ${relType}
-          WHERE (in = type::thing($nodeId) OR out = type::thing($nodeId))
-            AND (invalidAt = NONE OR invalidAt IS NULL OR invalidAt > time::now());
+          WHERE (in = type::thing($nodeId) OR out = type::thing($nodeId));
           `,
           { nodeId },
         )) as any[];

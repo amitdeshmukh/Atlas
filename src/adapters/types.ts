@@ -67,11 +67,13 @@ export interface StorageAdapter {
 
   /**
    * Get edges connected to a node.
+   * @param includeHistorical - When true, returns ALL edges regardless of temporal validity
    */
   getEdgesForNode(
     nodeId: string,
     direction: Direction,
     asOf: string,
+    includeHistorical?: boolean,
   ): Promise<Relationship[]>;
 
   /**

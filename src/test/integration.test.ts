@@ -1204,16 +1204,21 @@ describe('Integration Tests', () => {
       
       expect(success).toBe(true);
 
-      // Query the relationship - it should not be visible after the invalidAt date
-      const relationships = await worldModel.getRelationships(person.id, 'OUTGOING', '2025-06-01T00:00:00Z');
+      // Query the relationship with temporal filtering - it should not be visible after the invalidAt date
+      const relationships = await worldModel.getRelationships(person.id, 'OUTGOING', '2025-06-01T00:00:00Z', false);
       const found = relationships.find(r => r.id === relationship.id);
-      expect(found).toBeUndefined(); // Should not be visible after invalidAt
+      expect(found).toBeUndefined(); // Should not be visible after invalidAt when filtering is enabled
 
-      // But it should be visible before the invalidAt date
-      const relationshipsBeforeEnd = await worldModel.getRelationships(person.id, 'OUTGOING', '2024-06-01T00:00:00Z');
+      // But it should be visible before the invalidAt date (with temporal filtering)
+      const relationshipsBeforeEnd = await worldModel.getRelationships(person.id, 'OUTGOING', '2024-06-01T00:00:00Z', false);
       const foundBefore = relationshipsBeforeEnd.find(r => r.id === relationship.id);
       expect(foundBefore).toBeDefined();
       expect(foundBefore?.properties.title).toBe('CFO');
+
+      // With includeHistorical=true (default), all relationships should be visible regardless of time
+      const allRelationships = await worldModel.getRelationships(person.id, 'OUTGOING');
+      const foundAll = allRelationships.find(r => r.id === relationship.id);
+      expect(foundAll).toBeDefined(); // Should be visible when includeHistorical=true
     });
   });
 

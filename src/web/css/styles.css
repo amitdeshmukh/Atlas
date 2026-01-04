@@ -1034,3 +1034,77 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   height: 1px;
   background: var(--border-subtle);
 }
+
+/* ============ TEMPORAL TOGGLE ============ */
+.temporal-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.toggle-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 22px;
+  transition: var(--transition-smooth);
+}
+
+.toggle-slider::before {
+  position: absolute;
+  content: '';
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: var(--transition-smooth);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px var(--accent-primary);
+}
+
+.toggle-switch:hover .toggle-slider {
+  border-color: var(--border-strong);
+}
+
+.toggle-switch input:checked:hover + .toggle-slider {
+  border-color: var(--accent-primary);
+}
+
+/* ============ HISTORICAL/PAST EDGES ============ */
+/* These styles are applied via Cytoscape but documented here for reference */
+/* Historical edges that have ended (invalidAt in the past) shown with dashed lines */

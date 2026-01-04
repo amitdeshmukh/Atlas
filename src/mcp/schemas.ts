@@ -76,6 +76,10 @@ export const GetInstanceEdgesSchema = z.object({
     .enum(['INCOMING', 'OUTGOING', 'BOTH'])
     .default('BOTH')
     .describe('Direction of edges to retrieve (default: BOTH)'),
+  includeHistorical: z
+    .boolean()
+    .default(true)
+    .describe('When true (default), returns ALL edges including past ones. When false, only returns currently active edges.'),
 });
 
 export const FindInstancePathSchema = z.object({

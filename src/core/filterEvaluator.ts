@@ -13,11 +13,13 @@ import { canonicalName } from './types.js';
 export interface FilterContext {
   /**
    * Get edges for a node, used for HAS_RELATION evaluation.
+   * @param includeHistorical - When true, returns all edges regardless of temporal validity
    */
   getEdgesForNode(
     nodeId: string,
     direction: 'BOTH',
     asOf: string,
+    includeHistorical?: boolean,
   ): Promise<Relationship[]>;
 
   /**

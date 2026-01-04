@@ -139,14 +139,16 @@ export class WorldModel {
 
   /**
    * Get relationships for an entity.
+   * @param includeHistorical - When true, returns ALL relationships regardless of temporal validity
    */
   async getRelationships(
     entityId: string,
     direction: 'INCOMING' | 'OUTGOING' | 'BOTH' = 'BOTH',
     asOf?: string,
+    includeHistorical: boolean = true,
   ): Promise<Array<Relationship & { direction: 'INCOMING' | 'OUTGOING' }>> {
     const now = asOf ?? new Date().toISOString();
-    const edges = await this.adapter.getEdgesForNode(entityId, direction, now);
+    const edges = await this.adapter.getEdgesForNode(entityId, direction, now, includeHistorical);
 
     return edges.map((edge) => ({
       ...edge,

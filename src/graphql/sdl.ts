@@ -231,6 +231,8 @@ export const schemaSDL = /* GraphQL */ `
     relationships(
       direction: Direction = BOTH
       asOf: DateTime
+      "When true (default), returns ALL relationships regardless of temporal validity"
+      includeHistorical: Boolean = true
     ): [GraphEdge!]!
     properties: JSON!
     validAt: DateTime!
@@ -266,7 +268,7 @@ export const schemaSDL = /* GraphQL */ `
   type GenericNode implements Node {
     id: ID!
     type: String!
-    relationships(direction: Direction = BOTH, asOf: DateTime): [GraphEdge!]!
+    relationships(direction: Direction = BOTH, asOf: DateTime, includeHistorical: Boolean = true): [GraphEdge!]!
     properties: JSON!
     validAt: DateTime!
     invalidAt: DateTime

@@ -219,6 +219,26 @@ export class GraphRenderer {
         },
       },
 
+      // === HISTORICAL EDGES (past relationships shown in "all" mode) ===
+      {
+        selector: 'edge.historical',
+        style: {
+          'opacity': 0.5,
+          'line-color': colors.accentWarning,
+          'target-arrow-color': colors.accentWarning,
+          'line-style': 'dashed',
+        },
+      },
+
+      // === HISTORICAL NODES (past entities shown in "all" mode) ===
+      {
+        selector: 'node.historical',
+        style: {
+          'opacity': 0.5,
+          'border-style': 'dashed',
+        },
+      },
+
       // === HIGHLIGHTED ELEMENTS (Search/Path) ===
       {
         selector: '.highlighted',
