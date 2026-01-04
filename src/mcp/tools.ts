@@ -1,45 +1,57 @@
 /**
  * MCP tool definitions for AxOntology.
  * Provides agent-friendly tools for discovering, querying, and mutating the world model.
+ *
+ * Tool naming convention:
+ * - *_ontology_* = operates on schema layer (types, relation types)
+ * - *_instance_* = operates on data layer (actual nodes and edges)
  */
 
 import type { FastMCP } from 'fastmcp';
 import type { WorldModel } from '../core/worldModel.js';
 import type { FilterDSL } from '../core/types.js';
 import {
-  SearchConceptsSchema,
-  GetTypeInfoSchema,
-  GetRelationInfoSchema,
-  GetOntologySummarySchema,
-  SuggestTypeSchema,
-  FindEntitiesSchema,
-  GetEntitySchema,
-  GetRelationshipsSchema,
-  FindPathSchema,
+  // Ontology discovery
+  SearchOntologySchema,
+  GetOntologyTypeSchema,
+  GetOntologyRelationSchema,
   FindOntologyPathsSchema,
-  CreateEntitySchema,
-  UpdateEntitySchema,
-  LinkEntitiesSchema,
-  InvalidateRecordSchema,
+  // Instance query
+  FindInstancesSchema,
+  GetInstanceSchema,
+  GetInstanceEdgesSchema,
+  FindInstancePathSchema,
+  // Instance mutation
+  CreateInstanceSchema,
+  UpdateInstanceSchema,
+  CreateEdgeSchema,
+  InvalidateSchema,
+  // Ontology mutation
+  CreateOntologyTypeSchema,
+  CreateOntologyRelationSchema,
+  // Lists
   DefineListSchema,
   GetListMembersSchema,
   GetListDefinitionSchema,
+  // Help
   GetFilterExamplesSchema,
-  CreateTypeSchema,
-  CreateRelationTypeSchema,
 } from './schemas.js';
 
 /**
  * Register all tools with the FastMCP server.
  */
 export function registerTools(server: FastMCP, worldModel: WorldModel): void {
-  // Discovery Tools
+  // ========================================
+  // ONTOLOGY TOOLS (Schema Layer)
+  // ========================================
+
   server.addTool({
-    name: 'search_concepts',
+    name: 'search_ontology',
     description:
-      'Semantic search over the ontology - find types and relations by meaning. ' +
-      'Use this to discover what kinds of entities exist (e.g., "people who work at companies").',
-    parameters: SearchConceptsSchema,
+      'Semantic search over the ONTOLOGY SCHEMA - find types and relation types by meaning. ' +
+      'Use this to discover what kinds of entities CAN exist (e.g., "people who work at companies"). ' +
+      'Returns type definitions and relation types, NOT actual data instances.',
+    parameters: SearchOntologySchema,
     execute: async (args) => {
       const result = await worldModel.searchConcepts(args.query, args.limit);
       return JSON.stringify(result, null, 2);
@@ -47,10 +59,12 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'get_type_info',
+    name: 'get_ontology_type',
     description:
-      'Get detailed information about a specific type including its properties and relationships.',
-    parameters: GetTypeInfoSchema,
+      'Get details about a TYPE in the ontology schema. ' +
+      'Returns the type definition including its properties and what relations it can have. ' +
+      'Example: get_ontology_type("PERSON") returns properties like fullName, email, and relations like EMPLOYED_BY.',
+    parameters: GetOntologyTypeSchema,
     execute: async (args) => {
       const result = await worldModel.getTypeInfo(args.typeName);
       return JSON.stringify(result, null, 2);
@@ -58,10 +72,12 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'get_relation_info',
+    name: 'get_ontology_relation',
     description:
-      'Get detailed information about a specific relation type including source and target types.',
-    parameters: GetRelationInfoSchema,
+      'Get details about a RELATION TYPE in the ontology schema. ' +
+      'Returns the relation definition including which types it connects. ' +
+      'Example: get_ontology_relation("EMPLOYED_BY") shows it goes from PERSON to COMPANY.',
+    parameters: GetOntologyRelationSchema,
     execute: async (args) => {
       const result = await worldModel.getRelationInfo(args.relationName);
       return JSON.stringify(result, null, 2);
@@ -69,42 +85,33 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'get_ontology_summary',
+    name: 'find_ontology_paths',
     description:
-      'Get a summary of the ontology showing counts of types, relations, and lists. ' +
-      'Useful for understanding the scope of the world model.',
-    parameters: GetOntologySummarySchema,
-    execute: async () => {
-      const result = await worldModel.getOntologySummary();
+      'Find how two TYPES can connect in the ontology schema. ' +
+      'Use this to understand possible relationships between types BEFORE querying instances. ' +
+      'Example: find_ontology_paths("PERSON", "PRODUCT") might show PERSON→COMPANY→PRODUCT.',
+    parameters: FindOntologyPathsSchema,
+    execute: async (args) => {
+      const result = await worldModel.findOntologyPaths(
+        args.fromType,
+        args.toType,
+        args.maxDepth,
+      );
       return JSON.stringify(result, null, 2);
     },
   });
 
-  server.addTool({
-    name: 'suggest_type',
-    description:
-      'Given a description of what you want to create, suggests the best matching type.',
-    parameters: SuggestTypeSchema,
-    execute: async (args) => {
-      const results = await worldModel.searchConcepts(args.description, args.limit);
-      const suggestions = results.types.map((hit) => ({
-        type: hit.type,
-        confidence: hit.score,
-        reason: hit.matchReason ?? hit.type.description,
-      }));
-      return JSON.stringify(suggestions, null, 2);
-    },
-  });
+  // ========================================
+  // INSTANCE TOOLS (Data Layer)
+  // ========================================
 
-  // Query Tools
   server.addTool({
-    name: 'find_entities',
+    name: 'find_instances',
     description:
-      'Find entities of a specific type, optionally filtered. ' +
-      'The filter parameter must be a JSON object (not a string). ' +
-      'Example filter: {"operator": "CONTAINS", "field": "NAME", "value": "Alice"}. ' +
-      'See worldmodel://help/filter-examples for more syntax.',
-    parameters: FindEntitiesSchema,
+      'Find INSTANCES (actual data) of a given type, optionally filtered. ' +
+      'Example: find_instances("PERSON", filter: {"operator": "CONTAINS", "field": "name", "value": "Tim"}) ' +
+      'returns actual people like Tim Cook. Filter must be a JSON object, not a string.',
+    parameters: FindInstancesSchema,
     execute: async (args) => {
       const result = await worldModel.findEntities(
         args.type,
@@ -117,9 +124,11 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'get_entity',
-    description: 'Get a specific entity by its ID.',
-    parameters: GetEntitySchema,
+    name: 'get_instance',
+    description:
+      'Get a specific INSTANCE by its ID. ' +
+      'Returns the full instance data including all properties and metadata.',
+    parameters: GetInstanceSchema,
     execute: async (args) => {
       const result = await worldModel.getEntity(args.id);
       return JSON.stringify(result, null, 2);
@@ -127,26 +136,26 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'get_relationships',
+    name: 'get_instance_edges',
     description:
-      'Get DIRECT relationships for an entity (one hop only). ' +
-      'For indirect connections through multiple entities, use find_path instead. ' +
+      'Get DIRECT EDGES (one hop only) from an instance. ' +
+      'For multi-hop connections between instances, use find_instance_path instead. ' +
       'Returns edges with temporal data (validAt/invalidAt) for historical analysis.',
-    parameters: GetRelationshipsSchema,
+    parameters: GetInstanceEdgesSchema,
     execute: async (args) => {
-      const result = await worldModel.getRelationships(args.entityId, args.direction);
+      const result = await worldModel.getRelationships(args.instanceId, args.direction);
       return JSON.stringify(result, null, 2);
     },
   });
 
   server.addTool({
-    name: 'find_path',
+    name: 'find_instance_path',
     description:
-      'Find how two entities are connected through the graph. ' +
-      'IMPORTANT: Use this to discover indirect relationships! ' +
-      'Direct relationships may not exist, but entities can be connected through intermediate nodes. ' +
-      'Example: Person→Company→Product. Check temporal data on returned edges for historical accuracy.',
-    parameters: FindPathSchema,
+      'Find how two INSTANCES connect through the data graph. ' +
+      'IMPORTANT: Use this to discover indirect connections! Direct edges may not exist, ' +
+      'but instances can connect through intermediate nodes. ' +
+      'Example: find_instance_path("tim_cook_id", "seattle_id") might show Tim→Apple→Seattle.',
+    parameters: FindInstancePathSchema,
     execute: async (args) => {
       const result = await worldModel.findInstancePaths(
         args.fromId,
@@ -157,30 +166,17 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     },
   });
 
-  server.addTool({
-    name: 'find_ontology_paths',
-    description:
-      'Find how two types are connected in the ontology schema. ' +
-      'Useful for understanding possible relationships between types ' +
-      '(e.g., "How can PERSON connect to COMPANY?").',
-    parameters: FindOntologyPathsSchema,
-    execute: async (args) => {
-      const result = await worldModel.findOntologyPaths(
-        args.fromType,
-        args.toType,
-        args.maxDepth,
-      );
-      return JSON.stringify(result, null, 2);
-    },
-  });
+  // ========================================
+  // INSTANCE MUTATION TOOLS
+  // ========================================
 
-  // Mutation Tools
   server.addTool({
-    name: 'create_entity',
+    name: 'create_instance',
     description:
-      'Create a new entity in the world model. ' +
-      'Use suggest_type first if unsure which type to use.',
-    parameters: CreateEntitySchema,
+      'Create a new INSTANCE in the data graph. ' +
+      'Use search_ontology first to find the right type if unsure. ' +
+      'Properties must match what the type definition allows.',
+    parameters: CreateInstanceSchema,
     execute: async (args) => {
       const result = await worldModel.createEntity(args.type, args.properties);
       return JSON.stringify(result, null, 2);
@@ -188,11 +184,11 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'update_entity',
+    name: 'update_instance',
     description:
-      'Update an existing entity\'s properties. ' +
+      'Update an existing INSTANCE\'s properties. ' +
       'Properties are merged with existing values (partial update).',
-    parameters: UpdateEntitySchema,
+    parameters: UpdateInstanceSchema,
     execute: async (args) => {
       const result = await worldModel.updateEntity(args.id, args.properties);
       return JSON.stringify(result, null, 2);
@@ -200,12 +196,12 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'link_entities',
+    name: 'create_edge',
     description:
-      'Create a relationship between two entities. ' +
-      'Use search_concepts to discover valid relation types. ' +
+      'Create an EDGE (relationship) between two instances in the data graph. ' +
+      'Use search_ontology to discover valid relation types. ' +
       'Supports temporal validity windows via validAt/invalidAt for historical data.',
-    parameters: LinkEntitiesSchema,
+    parameters: CreateEdgeSchema,
     execute: async (args) => {
       const result = await worldModel.linkEntities(
         args.fromId,
@@ -214,7 +210,7 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
         args.properties,
         args.validAt,
       );
-      // If invalidAt is provided, immediately invalidate the relationship
+      // If invalidAt is provided, immediately invalidate the edge
       if (args.invalidAt) {
         await worldModel.invalidate(result.id, args.invalidAt);
         return JSON.stringify({ ...result, invalidAt: args.invalidAt }, null, 2);
@@ -224,12 +220,12 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'invalidate_record',
+    name: 'invalidate',
     description:
-      'End the validity of an entity or relationship by setting its invalidAt timestamp. ' +
+      'End the validity of an INSTANCE or EDGE by setting its invalidAt timestamp. ' +
       'Use this to record when something stopped being true (e.g., person left company). ' +
-      'Supports historical dates for backdating.',
-    parameters: InvalidateRecordSchema,
+      'This is a soft delete - the record remains for historical queries.',
+    parameters: InvalidateSchema,
     execute: async (args) => {
       const invalidAt = args.invalidAt ?? new Date().toISOString();
       const success = await worldModel.invalidate(args.id, invalidAt);
@@ -237,15 +233,18 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     },
   });
 
-  // Ontology Mutation Tools
+  // ========================================
+  // ONTOLOGY MUTATION TOOLS
+  // ========================================
+
   server.addTool({
-    name: 'create_type',
+    name: 'create_ontology_type',
     description:
-      'Create a new type in the ontology with optional properties. ' +
+      'Create a new TYPE in the ontology schema. ' +
       'Use this to extend the schema with new entity types (e.g., PRODUCT, NEWS_ARTICLE). ' +
       'Types must have unique names in UPPER_SNAKE_CASE. ' +
-      'Properties define what data entities of this type can store.',
-    parameters: CreateTypeSchema,
+      'Properties define what data instances of this type can store.',
+    parameters: CreateOntologyTypeSchema,
     execute: async (args) => {
       const result = await worldModel.upsertType(
         args.name,
@@ -257,11 +256,12 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'create_relation_type',
+    name: 'create_ontology_relation',
     description:
-      'Create a new relation type in the ontology. Use this to define how types can connect ' +
-      '(e.g., PRODUCT --MADE_BY--> COMPANY). Both source and target types must already exist.',
-    parameters: CreateRelationTypeSchema,
+      'Create a new RELATION TYPE in the ontology schema. ' +
+      'Defines how types can connect (e.g., PRODUCT --MADE_BY--> COMPANY). ' +
+      'Both source and target types must already exist in the ontology.',
+    parameters: CreateOntologyRelationSchema,
     execute: async (args) => {
       const result = await worldModel.upsertRelationType(
         args.name,
@@ -273,11 +273,14 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     },
   });
 
-  // List Tools
+  // ========================================
+  // LIST TOOLS
+  // ========================================
+
   server.addTool({
     name: 'define_list',
     description:
-      'Define a dynamic list (saved filter). ' +
+      'Define a dynamic list (saved filter) that returns matching instances. ' +
       'Lists are predicates, not containers - membership is evaluated at query time. ' +
       'The filter parameter must be a JSON object (not a string).',
     parameters: DefineListSchema,
@@ -294,7 +297,7 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
 
   server.addTool({
     name: 'get_list_members',
-    description: 'Get all entities that match a defined list.',
+    description: 'Get all INSTANCES that currently match a defined list.',
     parameters: GetListMembersSchema,
     execute: async (args) => {
       const result = await worldModel.getListMembers(args.name);
@@ -314,7 +317,10 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     },
   });
 
-  // Help Tool
+  // ========================================
+  // HELP TOOL
+  // ========================================
+
   server.addTool({
     name: 'get_filter_examples',
     description:
@@ -336,22 +342,22 @@ function getFilterExamples() {
       {
         name: 'Exact match',
         filter: { operator: 'EQUALS', field: 'email', value: 'alice@example.com' },
-        description: 'Find entities where email equals exactly',
+        description: 'Find instances where email equals exactly',
       },
       {
         name: 'Substring match',
         filter: { operator: 'CONTAINS', field: 'name', value: 'Tech' },
-        description: 'Find entities where name contains "Tech"',
+        description: 'Find instances where name contains "Tech"',
       },
       {
         name: 'Numeric comparison',
         filter: { operator: 'GT', field: 'revenue', value: 1000000 },
-        description: 'Find entities where revenue > 1,000,000',
+        description: 'Find instances where revenue > 1,000,000',
       },
       {
         name: 'Has relationship',
         filter: { operator: 'HAS_RELATION', relationType: 'EMPLOYED_BY' },
-        description: 'Find entities that have an EMPLOYED_BY relationship',
+        description: 'Find instances that have an EMPLOYED_BY edge',
       },
       {
         name: 'Relationship with target filter',
@@ -371,7 +377,7 @@ function getFilterExamples() {
             { operator: 'HAS_RELATION', relationType: 'EMPLOYED_BY' },
           ],
         },
-        description: 'Find entities matching ALL conditions',
+        description: 'Find instances matching ALL conditions',
       },
       {
         name: 'Combine with OR',
@@ -382,7 +388,7 @@ function getFilterExamples() {
             { operator: 'CONTAINS', field: 'name', value: 'Bob' },
           ],
         },
-        description: 'Find entities matching ANY condition',
+        description: 'Find instances matching ANY condition',
       },
       {
         name: 'Negate with NOT',
@@ -390,7 +396,7 @@ function getFilterExamples() {
           operator: 'NOT',
           operands: [{ operator: 'HAS_RELATION', relationType: 'EMPLOYED_BY' }],
         },
-        description: 'Find entities that do NOT have an EMPLOYED_BY relationship',
+        description: 'Find instances that do NOT have an EMPLOYED_BY edge',
       },
       {
         name: 'Complex: Not employed at Google',
@@ -409,4 +415,3 @@ function getFilterExamples() {
     ],
   };
 }
-

@@ -28,17 +28,28 @@ export async function createGraphQLServer(
     logger: true,
   });
 
+  // Store initial worldModel and adapter in app context
+  (app as any).worldModel = worldModel;
+  (app as any).adapter = adapter;
+
   const resolvers = buildResolvers(worldModel, adapter);
 
   await app.register(mercurius, {
     schema: schemaSDL,
     resolvers: resolvers as any,
     graphiql: true,
-    context: () => ({
-      asOf: new Date().toISOString(),
-      worldModel,
-      adapter,
-    }),
+    context: () => {
+      // Use dynamic worldModel/adapter if available (updated via API)
+      // Otherwise fall back to initial ones
+      const currentWorldModel = (app as any).worldModel || worldModel;
+      const currentAdapter = (app as any).adapter || adapter;
+
+      return {
+        asOf: new Date().toISOString(),
+        worldModel: currentWorldModel,
+        adapter: currentAdapter,
+      };
+    },
   });
 
   return app;

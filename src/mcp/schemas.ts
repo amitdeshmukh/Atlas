@@ -1,6 +1,10 @@
 /**
  * Zod schemas for MCP tool parameters.
  * Provides type-safe validation for all tool inputs.
+ *
+ * Naming convention:
+ * - Ontology* = operates on schema layer (types, relation types)
+ * - Instance* = operates on data layer (actual nodes and edges)
  */
 
 import { z } from 'zod';
@@ -27,100 +31,133 @@ export const FilterDSLSchema: z.ZodType<any> = z.lazy(() =>
   }),
 );
 
-// === Discovery Tools ===
+// === Ontology Discovery Tools (Schema Layer) ===
 
-export const SearchConceptsSchema = z.object({
+export const SearchOntologySchema = z.object({
   query: z
     .string()
-    .describe('Natural language description of what you are looking for'),
+    .describe('Natural language description of types or relations to find in the schema'),
   limit: z.number().default(10).describe('Maximum number of results (default: 10)'),
 });
 
-export const GetTypeInfoSchema = z.object({
-  typeName: z.string().describe('The name of the type (e.g., "PERSON", "COMPANY")'),
+export const GetOntologyTypeSchema = z.object({
+  typeName: z.string().describe('The name of the type in the ontology (e.g., "PERSON", "COMPANY")'),
 });
 
-export const GetRelationInfoSchema = z.object({
-  relationName: z.string().describe('The name of the relation (e.g., "EMPLOYED_BY")'),
+export const GetOntologyRelationSchema = z.object({
+  relationName: z.string().describe('The name of the relation type in the ontology (e.g., "EMPLOYED_BY")'),
 });
 
-export const GetOntologySummarySchema = z.object({
-  // No parameters required
+export const FindOntologyPathsSchema = z.object({
+  fromType: z.string().describe('Starting type name in the ontology (e.g., "PERSON")'),
+  toType: z.string().describe('Target type name in the ontology (e.g., "COMPANY")'),
+  maxDepth: z.number().default(3).describe('Maximum number of hops through relation types (default: 3)'),
 });
 
-export const SuggestTypeSchema = z.object({
-  description: z.string().describe('Description of the entity you want to create'),
-  limit: z.number().default(3).describe('Number of suggestions (default: 3)'),
-});
+// === Instance Query Tools (Data Layer) ===
 
-// === Query Tools ===
-
-export const FindEntitiesSchema = z.object({
-  type: z.string().describe('The type of entities to find (e.g., "PERSON")'),
+export const FindInstancesSchema = z.object({
+  type: z.string().describe('The type of instances to find (e.g., "PERSON")'),
   filter: FilterDSLSchema.optional().describe(
     'Optional FilterDSL object to filter results. ' +
       'IMPORTANT: Pass as a JSON object, NOT a string. ' +
-      'Example: {"operator": "CONTAINS", "field": "NAME", "value": "Alice"}',
+      'Example: {"operator": "CONTAINS", "field": "name", "value": "Alice"}',
   ),
   limit: z.number().default(100).describe('Maximum number of results (default: 100)'),
 });
 
-export const GetEntitySchema = z.object({
-  id: z.string().describe('The entity ID (e.g., "node:abc123")'),
+export const GetInstanceSchema = z.object({
+  id: z.string().describe('The instance ID (e.g., "node:abc123")'),
 });
 
-export const GetRelationshipsSchema = z.object({
-  entityId: z.string().describe('The entity ID'),
+export const GetInstanceEdgesSchema = z.object({
+  instanceId: z.string().describe('The instance ID to get edges for'),
   direction: z
     .enum(['INCOMING', 'OUTGOING', 'BOTH'])
     .default('BOTH')
-    .describe('Direction of relationships (default: BOTH)'),
+    .describe('Direction of edges to retrieve (default: BOTH)'),
 });
 
-export const FindPathSchema = z.object({
-  fromId: z.string().describe('Starting entity ID'),
-  toId: z.string().describe('Target entity ID'),
-  maxDepth: z.number().default(3).describe('Maximum number of hops (default: 3)'),
+export const FindInstancePathSchema = z.object({
+  fromId: z.string().describe('Starting instance ID'),
+  toId: z.string().describe('Target instance ID'),
+  maxDepth: z.number().default(3).describe('Maximum number of hops through edges (default: 3)'),
 });
 
-export const FindOntologyPathsSchema = z.object({
-  fromType: z.string().describe('Starting type name (e.g., "PERSON")'),
-  toType: z.string().describe('Target type name (e.g., "COMPANY")'),
-  maxDepth: z.number().default(3).describe('Maximum number of hops (default: 3)'),
-});
+// === Instance Mutation Tools (Data Layer) ===
 
-// === Mutation Tools ===
-
-export const CreateEntitySchema = z.object({
-  type: z.string().describe('The type of entity (e.g., "PERSON")'),
+export const CreateInstanceSchema = z.object({
+  type: z.string().describe('The type of instance to create (e.g., "PERSON")'),
   properties: z
     .record(z.string(), z.unknown())
-    .describe('Properties for the entity (must match type definition)'),
+    .describe('Properties for the instance (must match type definition in ontology)'),
 });
 
-export const UpdateEntitySchema = z.object({
-  id: z.string().describe('The entity ID to update'),
+export const UpdateInstanceSchema = z.object({
+  id: z.string().describe('The instance ID to update'),
   properties: z
     .record(z.string(), z.unknown())
     .describe('Properties to update (merged with existing properties)'),
 });
 
-export const LinkEntitiesSchema = z.object({
-  fromId: z.string().describe('Source entity ID'),
-  relationType: z.string().describe('Type of relationship (e.g., "EMPLOYED_BY")'),
-  toId: z.string().describe('Target entity ID'),
+export const CreateEdgeSchema = z.object({
+  fromId: z.string().describe('Source instance ID'),
+  relationType: z.string().describe('Relation type from the ontology (e.g., "EMPLOYED_BY")'),
+  toId: z.string().describe('Target instance ID'),
   properties: z
     .record(z.string(), z.unknown())
     .optional()
-    .describe('Optional properties for the relationship'),
+    .describe('Optional properties for the edge'),
   validAt: z
     .string()
     .optional()
-    .describe('ISO timestamp when this relationship became valid (default: now)'),
+    .describe('ISO timestamp when this edge became valid (default: now)'),
   invalidAt: z
     .string()
     .optional()
-    .describe('ISO timestamp when this relationship ended (default: null = still active)'),
+    .describe('ISO timestamp when this edge ended (default: null = still active)'),
+});
+
+export const InvalidateSchema = z.object({
+  id: z.string().describe('ID of the instance or edge to invalidate'),
+  invalidAt: z
+    .string()
+    .optional()
+    .describe('ISO timestamp when the record became invalid (default: now)'),
+});
+
+// === Ontology Mutation Tools (Schema Layer) ===
+
+export const PropertyDefSchema = z.object({
+  name: z.string().describe('Property name in camelCase (e.g., "name", "releaseDate", "emailAddress")'),
+  description: z.string().describe('Human-readable description of the property'),
+  dataType: z
+    .enum(['STRING', 'NUMBER', 'BOOLEAN', 'DATE'])
+    .describe('Data type of the property'),
+});
+
+export const CreateOntologyTypeSchema = z.object({
+  name: z.string().describe('Name of the type in UPPER_SNAKE_CASE (e.g., "PRODUCT", "NEWS_ARTICLE")'),
+  description: z
+    .string()
+    .min(10)
+    .describe('Human-readable description of the type (min 10 chars)'),
+  properties: z
+    .array(PropertyDefSchema)
+    .optional()
+    .describe('Optional array of property definitions for this type'),
+});
+
+export const CreateOntologyRelationSchema = z.object({
+  name: z
+    .string()
+    .describe('Name of the relation in UPPER_SNAKE_CASE (e.g., "MADE_BY", "ANNOUNCED_AT")'),
+  description: z
+    .string()
+    .min(10)
+    .describe('Human-readable description of the relation (min 10 chars)'),
+  sourceType: z.string().describe('The source type in the ontology (e.g., "PRODUCT")'),
+  targetType: z.string().describe('The target type in the ontology (e.g., "COMPANY")'),
 });
 
 // === List Tools ===
@@ -128,7 +165,7 @@ export const LinkEntitiesSchema = z.object({
 export const DefineListSchema = z.object({
   name: z.string().describe('Unique name for the list'),
   description: z.string().min(10).describe('Human-readable description (min 10 chars)'),
-  targetType: z.string().describe('The type of entities this list contains'),
+  targetType: z.string().describe('The type of instances this list contains'),
   filter: FilterDSLSchema.describe(
     'FilterDSL object defining list membership. ' +
       'IMPORTANT: Pass as a JSON object, NOT a string. ' +
@@ -142,50 +179,6 @@ export const GetListMembersSchema = z.object({
 
 export const GetListDefinitionSchema = z.object({
   name: z.string().describe('Name of the list to retrieve'),
-});
-
-// === Temporal Tools ===
-
-export const InvalidateRecordSchema = z.object({
-  id: z.string().describe('ID of the entity or relationship to invalidate'),
-  invalidAt: z
-    .string()
-    .optional()
-    .describe('ISO timestamp when the record became invalid (default: now)'),
-});
-
-// === Ontology Mutation Tools ===
-
-export const PropertyDefSchema = z.object({
-  name: z.string().describe('Property name in UPPER_SNAKE_CASE (e.g., "NAME", "RELEASE_DATE")'),
-  description: z.string().describe('Human-readable description of the property'),
-  dataType: z
-    .enum(['STRING', 'NUMBER', 'BOOLEAN', 'DATE'])
-    .describe('Data type of the property'),
-});
-
-export const CreateTypeSchema = z.object({
-  name: z.string().describe('Name of the type in UPPER_SNAKE_CASE (e.g., "PRODUCT", "NEWS_ARTICLE")'),
-  description: z
-    .string()
-    .min(10)
-    .describe('Human-readable description of the type (min 10 chars)'),
-  properties: z
-    .array(PropertyDefSchema)
-    .optional()
-    .describe('Optional array of property definitions for this type'),
-});
-
-export const CreateRelationTypeSchema = z.object({
-  name: z
-    .string()
-    .describe('Name of the relation in UPPER_SNAKE_CASE (e.g., "MADE_BY", "ANNOUNCED_AT")'),
-  description: z
-    .string()
-    .min(10)
-    .describe('Human-readable description of the relation (min 10 chars)'),
-  sourceType: z.string().describe('The type that this relation originates from (e.g., "PRODUCT")'),
-  targetType: z.string().describe('The type that this relation points to (e.g., "COMPANY")'),
 });
 
 // === Help Tool ===

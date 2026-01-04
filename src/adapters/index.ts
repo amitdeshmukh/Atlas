@@ -5,6 +5,7 @@
 
 import type { StorageAdapter } from './types.js';
 import { createSurrealAdapter } from './surreal/surrealAdapter.js';
+import type { SurrealConfig } from '../config.js';
 
 export type BackendType = 'surreal' | 'neo4j' | 'postgres';
 
@@ -13,12 +14,13 @@ export type BackendType = 'surreal' | 'neo4j' | 'postgres';
  * Currently only SurrealDB is implemented.
  *
  * @param backend - The backend type to use (default: 'surreal')
+ * @param config - Optional configuration for the backend (if not provided, uses environment variables)
  * @returns A storage adapter instance
  */
-export function createStorageAdapter(backend: BackendType = 'surreal'): StorageAdapter {
+export function createStorageAdapter(backend: BackendType = 'surreal', config?: SurrealConfig): StorageAdapter {
   switch (backend) {
     case 'surreal':
-      return createSurrealAdapter();
+      return createSurrealAdapter(config);
 
     case 'neo4j':
       throw new Error(

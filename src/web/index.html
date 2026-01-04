@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AxOntology | World Model Visualizer</title>
+  <link rel="stylesheet" href="css/styles.css?v=8">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⚡ AxOntology</h1>
+      <div id="connection-info" class="connection-info">
+        <span id="status-indicator" class="status-indicator"></span>
+        <span id="connection-text">Initializing...</span>
+        <button id="config-btn" class="btn btn-small">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          Configure
+        </button>
+      </div>
+    </header>
+
+    <div class="main-content">
+      <aside class="sidebar">
+        <section class="control-section">
+          <h3>View Mode</h3>
+          <div class="button-group">
+            <button id="view-schema" class="btn active">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+              Schema
+            </button>
+            <button id="view-instances" class="btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <circle cx="12" cy="12" r="4"></circle>
+                <line x1="4.93" y1="4.93" x2="9.17" y2="9.17"></line>
+                <line x1="14.83" y1="14.83" x2="19.07" y2="19.07"></line>
+                <line x1="14.83" y1="9.17" x2="19.07" y2="4.93"></line>
+                <line x1="4.93" y1="19.07" x2="9.17" y2="14.83"></line>
+              </svg>
+              Instances
+            </button>
+          </div>
+        </section>
+
+        <section class="control-section">
+          <h3>Layout Algorithm</h3>
+          <select id="layout-select" class="select">
+            <option value="cose">Force-Directed</option>
+            <option value="circle">Circular</option>
+            <option value="breadthfirst">Hierarchical</option>
+            <option value="grid">Grid</option>
+            <option value="concentric">Concentric</option>
+          </select>
+        </section>
+
+        <section class="control-section">
+          <h3>Filter Types</h3>
+          <select id="type-filter" class="select" multiple size="5">
+            <!-- Populated dynamically -->
+          </select>
+        </section>
+
+        <section class="control-section">
+          <h3>Search</h3>
+          <input type="text" id="search-box" class="input" placeholder="Search nodes...">
+        </section>
+
+        <section id="node-details" class="control-section node-details hidden">
+          <h3>Selection Details</h3>
+          <div id="node-details-content">
+            <p class="text-muted">Select a node or edge to view details</p>
+          </div>
+        </section>
+      </aside>
+
+      <main class="graph-area">
+        <div id="cy-container" class="cy-container"></div>
+        <div id="loading" class="loading hidden">
+          <div class="spinner"></div>
+          <p>Loading world model...</p>
+        </div>
+        <div id="error" class="error hidden"></div>
+      </main>
+    </div>
+
+    <footer class="timeline-container">
+      <div class="timeline-controls">
+        <button id="live-btn" class="btn btn-small btn-primary">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 4px;">
+            <circle cx="12" cy="12" r="8"></circle>
+          </svg>
+          LIVE
+        </button>
+        <div class="timeline-slider-container">
+          <label>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span id="current-time">Current State</span>
+          </label>
+          <input type="range" id="timeline-slider" min="0" max="100" value="100" class="slider">
+        </div>
+        <input type="text" id="custom-time" class="input-small" placeholder="Select date & time">
+      </div>
+    </footer>
+  </div>
+
+  <!-- Configuration Modal -->
+  <div id="config-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Connection Settings</h2>
+        <button id="close-config-modal" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="config-section">
+          <h3>SurrealDB Connection</h3>
+          <div class="config-field">
+            <label>URL</label>
+            <input type="text" id="config-url" class="input" placeholder="http://127.0.0.1:8000/rpc">
+          </div>
+          <div class="config-field">
+            <label>Namespace</label>
+            <input type="text" id="config-namespace" class="input" placeholder="axontology">
+          </div>
+          <div class="config-field">
+            <label>Database</label>
+            <input type="text" id="config-database" class="input" placeholder="axontology">
+          </div>
+          <div class="config-field">
+            <label>Username</label>
+            <input type="text" id="config-username" class="input" placeholder="root">
+          </div>
+          <div class="config-field">
+            <label>Password</label>
+            <input type="password" id="config-password" class="input" placeholder="Enter password">
+          </div>
+        </div>
+        <div id="config-error" class="config-error hidden"></div>
+        <div class="config-actions">
+          <button id="connect-btn" class="btn btn-primary">Connect</button>
+          <button id="reset-config-btn" class="btn">Reset</button>
+        </div>
+        <div class="config-note">
+          <p><strong>Note:</strong> Connection changes apply immediately. The new settings will be used for all subsequent queries.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js?v=6"></script>
+</body>
+</html>
