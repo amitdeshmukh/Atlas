@@ -117,8 +117,8 @@ export class GraphQLClient {
 
   async fetchInstancesByType(type, asOf = null, limit = 100, includeHistorical = false) {
     const query = `
-      query($type: String!, $asOf: DateTime, $limit: Int, $includeHistorical: Boolean) {
-        nodes(type: $type, asOf: $asOf, limit: $limit) {
+      query($type: String!, $filter: FilterDSL!, $asOf: DateTime, $limit: Int, $includeHistorical: Boolean) {
+        nodes(type: $type, filter: $filter, asOf: $asOf, limit: $limit) {
           id
           type
           properties
@@ -139,7 +139,9 @@ export class GraphQLClient {
         }
       }
     `;
-    return this.query(query, { type, asOf, limit, includeHistorical });
+    // Use a filter that matches all nodes (CONTAINS with null field returns true)
+    const filter = { operator: 'CONTAINS', field: null, value: '' };
+    return this.query(query, { type, filter, asOf, limit, includeHistorical });
   }
 
   async fetchEntity(id, asOf = null) {
