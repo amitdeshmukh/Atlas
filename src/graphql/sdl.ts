@@ -23,10 +23,11 @@ export const schemaSDL = /* GraphQL */ `
     "Lightweight ontology summary (counts)"
     ontologySummary: OntologySummary!
 
-    "Data query: Get nodes of a type, optionally filtered"
+    "Data query: Get nodes of a type with REQUIRED filter (types can have billions of instances)"
     nodes(
       type: String!
-      filter: FilterDSL
+      "REQUIRED: Filter is mandatory because types can have billions of instances"
+      filter: FilterDSL!
       asOf: DateTime
       limit: Int = 100
     ): [Node!]!
@@ -34,8 +35,8 @@ export const schemaSDL = /* GraphQL */ `
     "Data query: Get a specific node by ID"
     node(id: ID!, asOf: DateTime): Node
 
-    "Evaluate a named list definition"
-    list(name: String!, asOf: DateTime): ListResult
+    "Evaluate a named list definition (returns up to limit members)"
+    list(name: String!, asOf: DateTime, limit: Int = 100): ListResult
 
     """
     Find how two types are connected in the ontology graph.

@@ -304,10 +304,12 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
 
   server.addTool({
     name: 'get_list_members',
-    description: 'Get all INSTANCES that currently match a defined list.',
+    description: 
+      'Get INSTANCES that match a defined list (up to limit). ' +
+      'Lists can contain millions of members, so always use a reasonable limit.',
     parameters: GetListMembersSchema,
     execute: async (args) => {
-      const result = await worldModel.getListMembers(args.name);
+      const result = await worldModel.getListMembers(args.name, undefined, args.limit);
       return JSON.stringify(result, null, 2);
     },
   });

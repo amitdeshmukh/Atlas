@@ -298,13 +298,13 @@ export class WorldModel {
   /**
    * Get list members by evaluating the list's predicate.
    */
-  async getListMembers(listName: string, asOf?: string): Promise<Entity[]> {
+  async getListMembers(listName: string, asOf?: string, limit: number = 100): Promise<Entity[]> {
     const now = asOf ?? new Date().toISOString();
     const def = await this.adapter.getListDefinitionByName(listName, now);
 
     if (!def) return [];
 
-    return this.findEntities(def.targetType, def.filter, now, 10_000);
+    return this.findEntities(def.targetType, def.filter, now, limit);
   }
 
   /**

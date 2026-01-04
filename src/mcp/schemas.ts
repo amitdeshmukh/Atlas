@@ -180,6 +180,7 @@ export const DefineListSchema = z.object({
 
 export const GetListMembersSchema = z.object({
   name: z.string().describe('Name of the list to evaluate'),
+  limit: z.number().default(100).describe('Maximum number of members to return (default: 100)'),
 });
 
 export const GetListDefinitionSchema = z.object({

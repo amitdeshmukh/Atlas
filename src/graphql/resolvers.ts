@@ -86,10 +86,11 @@ export function buildResolvers(worldModel: WorldModel, adapter: StorageAdapter) 
 
       async nodes(
         _root: unknown,
-        args: { type: string; filter?: FilterDSL | null; asOf?: string; limit?: number },
+        args: { type: string; filter: FilterDSL; asOf?: string; limit?: number },
         ctx: ResolverContext,
       ) {
         const asOf = args.asOf ?? ctx.asOf;
+        // Filter is now required - types can have billions of instances
         const entities = await ctx.worldModel.findEntities(
           args.type,
           args.filter,
@@ -129,14 +130,15 @@ export function buildResolvers(worldModel: WorldModel, adapter: StorageAdapter) 
 
       async list(
         _root: unknown,
-        args: { name: string; asOf?: string },
+        args: { name: string; asOf?: string; limit?: number },
         ctx: ResolverContext,
       ) {
         const asOf = args.asOf ?? ctx.asOf;
+        const limit = args.limit ?? 100;
         const def = await ctx.worldModel.getListDefinition(args.name, asOf);
         if (!def) return null;
 
-        const members = await ctx.worldModel.getListMembers(args.name, asOf);
+        const members = await ctx.worldModel.getListMembers(args.name, asOf, limit);
         return {
           name: def.name,
           description: def.description,
@@ -498,15 +500,16 @@ async function resolveNodeRef(
   const key = ref.key ?? null;
   const value = ref.value;
 
-  if (!type || !key) {
+  if (!type || !key || value === undefined) {
     throw new Error('NodeRefInput must include either id, or type + key + value.');
   }
 
-  const candidates = await ctx.worldModel.findEntities(type, null, asOf, 10_000);
-  const matches = candidates.filter((n) => n.properties[key] === value);
+  // Use a targeted EQUALS filter instead of fetching all entities
+  const filter: FilterDSL = { operator: 'EQUALS', field: key, value };
+  const matches = await ctx.worldModel.findEntities(type, filter, asOf, 2);
 
   if (matches.length === 0) {
-    throw new Error(`No node found for NodeRefInput (type=${type}, key=${key}).`);
+    throw new Error(`No node found for NodeRefInput (type=${type}, key=${key}, value=${JSON.stringify(value)}).`);
   }
   if (matches.length > 1) {
     throw new Error(

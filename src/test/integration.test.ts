@@ -214,14 +214,14 @@ describe('Integration Tests', () => {
       companyId = result.data?.upsertNode.id as string;
     });
 
-    it('should query nodes by type', async () => {
+    it('should query nodes by type with filter', async () => {
       const result = await graphqlQuery<{
         nodes: Array<{ id: string; type: string; properties: Record<string, unknown> }>;
       }>(
         ctx.app,
         `
         query {
-          nodes(type: "PERSON") {
+          nodes(type: "PERSON", filter: { operator: CONTAINS, field: "fullName", value: "Test" }) {
             id
             type
             properties
@@ -1012,7 +1012,7 @@ describe('Integration Tests', () => {
         ctx.app,
         `
         query {
-          nodes(type: "PERSON", asOf: "${pastDate}") {
+          nodes(type: "PERSON", filter: { operator: CONTAINS, field: "fullName", value: "Temporal" }, asOf: "${pastDate}") {
             id
           }
         }
