@@ -1,4 +1,4 @@
-# AxOntology GraphQL DSL
+# Atlas GraphQL DSL
 
 ## Scalars
 

@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD)
 
-## GraphQL Ontology, Temporal Graph & Lists Layer
+## Atlas: Dynamic World Model for Agents
 
 **Backend:** Fastify + GraphQL + SurrealDB (pluggable storage)
 **Audience:** Backend / Platform Engineering
@@ -9,6 +9,8 @@
 ---
 
 ## 1. Purpose & Scope
+
+**Atlas** is a dynamic world model for agents that encodes temporal and spatial knowledge, enabling intelligent exploration and reasoning.
 
 This system provides a **GraphQL-first ontology, graph mutation, and list-definition layer** over a native graph database.
 
@@ -21,6 +23,17 @@ It is designed as a **"Shared Brain" for Humans and AI Agents**, enabling:
 * **Universal Traversal** ("Blind Walking" for Agents)
 * **Semantic Search** (Find types/relations by meaning)
 * **MCP Interface** (Tool-based access for LLM agents)
+* **Multi-Agent Collaboration** (Simultaneous updates by multiple agents)
+
+### Multi-Agent Collaboration
+
+Atlas is designed to support **multiple agents operating simultaneously**, enabling collaborative intelligence:
+
+* **Concurrent Updates**: Multiple agents can write to the world model in parallel without conflicts
+* **Temporal Consistency**: The `validAt`/`invalidAt` model ensures agents record observations as separate temporal facts rather than overwriting each other
+* **Shared Discovery**: Agents immediately benefit from knowledge contributed by other agents
+* **Parallel Exploration**: Different agents can explore different domains simultaneously while maintaining a unified world view
+* **Distributed Reasoning**: Agents can specialize in different areas while contributing to collective situational awareness
 
 ### Explicitly Out of Scope
 

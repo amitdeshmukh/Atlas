@@ -1,6 +1,6 @@
 /**
  * GraphQL Client
- * Handles all GraphQL queries to the AxOntology backend
+ * Handles all GraphQL queries to the Atlas backend
  */
 
 export class GraphQLClient {

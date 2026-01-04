@@ -27,8 +27,8 @@ export interface ServerConfig {
 export function getSurrealConfig(): SurrealConfig {
   return {
     url: process.env.SURREAL_URL ?? 'http://127.0.0.1:8000/rpc',
-    namespace: process.env.SURREAL_NS ?? 'axontology',
-    database: process.env.SURREAL_DB ?? 'axontology',
+    namespace: process.env.SURREAL_NS ?? 'atlas',
+    database: process.env.SURREAL_DB ?? 'atlas',
     username: process.env.SURREAL_USER ?? "",
     password: process.env.SURREAL_PASS ?? ""
   };

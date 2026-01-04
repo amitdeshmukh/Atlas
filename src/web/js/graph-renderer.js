@@ -482,7 +482,7 @@ export class GraphRenderer {
     const url = URL.createObjectURL(png);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'axontology-graph.png';
+    a.download = 'atlas-graph.png';
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -494,7 +494,7 @@ export class GraphRenderer {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'axontology-graph.json';
+    a.download = 'atlas-graph.json';
     a.click();
     URL.revokeObjectURL(url);
   }

@@ -1,7 +1,7 @@
 {
-  "name": "axontology",
+  "name": "atlas",
   "version": "1.0.0",
-  "description": "AxOntology - A Shared Brain for Humans and AI Agents",
+  "description": "Atlas - A dynamic world model enabling multiple agents to simultaneously explore, update, and reason over shared temporal and spatial knowledge",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {

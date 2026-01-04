@@ -1,6 +1,8 @@
-# AxOntology
+# Atlas
 
-A **GraphQL-first ontology, temporal graph, and list-definition layer** over a native graph database.
+**A dynamic world model for agents that encodes temporal and spatial knowledge, enabling intelligent exploration and reasoning.**
+
+Atlas is a **GraphQL-first ontology, temporal graph, and list-definition layer** over a native graph database.
 
 Designed as a **"Shared Brain" for Humans and AI Agents**, enabling:
 
@@ -9,6 +11,22 @@ Designed as a **"Shared Brain" for Humans and AI Agents**, enabling:
 - **Declarative, dynamic lists** (Predicates, not containers)
 - **Universal Traversal** for agent exploration
 - **Dual interfaces**: GraphQL API + MCP Server for LLM agents
+- **Multi-agent collaboration**: Multiple agents can simultaneously update and query the world model
+
+## Multi-Agent Collaboration
+
+Atlas enables **multiple agents to work together** by providing a shared, dynamically-updatable knowledge base:
+
+### Simultaneous Updates
+- **Conflict-free writes**: The temporal model (`validAt`/`invalidAt`) allows agents to record observations without overwriting each other's data
+- **Parallel exploration**: Multiple agents can simultaneously discover and record different parts of the world
+- **Distributed intelligence**: Each agent contributes its unique perspective and discoveries to the collective knowledge
+
+### Benefits
+- **Shared situational awareness**: All agents see the same world state, enabling coordinated decision-making
+- **Collaborative learning**: Agents build on each other's discoveries rather than working in isolation
+- **Temporal consistency**: Historical data remains immutable, allowing agents to reason about how knowledge evolved over time
+- **Specialization**: Different agents can focus on different domains while maintaining a unified world view
 
 ## Architecture
 

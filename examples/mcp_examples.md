@@ -1,6 +1,6 @@
 # MCP Server Examples
 
-The AxOntology MCP server provides tools for LLM agents to interact with the world model without writing GraphQL.
+The Atlas MCP server provides tools for LLM agents to interact with the world model without writing GraphQL.
 
 > **⚠️ IMPORTANT: JSON Objects vs Strings**
 > 

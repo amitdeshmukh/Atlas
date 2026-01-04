@@ -1,10 +1,10 @@
 # Adding a New Storage Backend
 
-This guide explains how to implement a new storage adapter for AxOntology.
+This guide explains how to implement a new storage adapter for Atlas.
 
 ## Overview
 
-AxOntology uses an adapter pattern to abstract the storage layer. This allows the system to support multiple graph databases (SurrealDB, Neo4j, PostgreSQL, etc.) without changing the core business logic.
+Atlas uses an adapter pattern to abstract the storage layer. This allows the system to support multiple graph databases (SurrealDB, Neo4j, PostgreSQL, etc.) without changing the core business logic.
 
 ## StorageAdapter Interface
 

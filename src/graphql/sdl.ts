@@ -1,5 +1,5 @@
 /**
- * GraphQL Schema Definition Language (SDL) for AxOntology.
+ * GraphQL Schema Definition Language (SDL) for Atlas.
  * Defines the public API surface for the world model.
  */
 

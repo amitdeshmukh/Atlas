@@ -1,5 +1,5 @@
 /**
- * AxOntology Visualizer - Main Application
+ * Atlas Visualizer - Main Application
  * Orchestrates all components and manages application state
  * Version: 5
  */
@@ -10,7 +10,7 @@ import { DataTransformer } from './data-transformer.js';
 import { Timeline } from './timeline.js';
 import { UIControls } from './ui-controls.js';
 
-console.log('%c[AxOntology] Visualizer v5 loaded', 'color: #00d4aa; font-weight: bold;');
+console.log('%c[Atlas] Visualizer v5 loaded', 'color: #00d4aa; font-weight: bold;');
 
 class VisualizerApp {
   constructor() {
@@ -33,7 +33,7 @@ class VisualizerApp {
 
   async init() {
     try {
-      this.ui.showLoading('Connecting to AxOntology...');
+      this.ui.showLoading('Connecting to Atlas...');
 
       // Test connection
       await this.testConnection();
@@ -273,7 +273,7 @@ class VisualizerApp {
       this.ui.showLoading('Loading instance data...');
 
       const asOf = this.currentAsOf;
-      console.log('[AxOntology] Loading instances with asOf:', asOf);
+      console.log('[Atlas] Loading instances with asOf:', asOf);
       
       const nodes = await this.client.fetchAllInstances(asOf, 100);
 

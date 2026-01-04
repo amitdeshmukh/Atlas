@@ -1,6 +1,6 @@
-# AxOntology Examples
+# Atlas Examples
 
-This directory contains example GraphQL queries, mutations, and bootstrap data for AxOntology.
+This directory contains example GraphQL queries, mutations, and bootstrap data for Atlas.
 
 ## Directory Structure
 

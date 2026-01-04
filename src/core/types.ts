@@ -1,5 +1,5 @@
 /**
- * Core domain types for the AxOntology system.
+ * Core domain types for the Atlas system.
  * These types are backend-agnostic and represent the domain model.
  */
 

@@ -1,5 +1,5 @@
 /**
- * MCP tool definitions for AxOntology.
+ * MCP tool definitions for Atlas.
  * Provides agent-friendly tools for discovering, querying, and mutating the world model.
  *
  * Tool naming convention:

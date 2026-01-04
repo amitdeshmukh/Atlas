@@ -1,5 +1,5 @@
 /**
- * GraphQL resolvers for AxOntology.
+ * GraphQL resolvers for Atlas.
  * These are thin wrappers around the WorldModel and StorageAdapter.
  */
 

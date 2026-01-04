@@ -1,5 +1,5 @@
 /**
- * AxOntology - Entry Point
+ * Atlas - Entry Point
  *
  * Starts the GraphQL server and optionally the MCP server.
  * Uses the new layered architecture with WorldModel and StorageAdapter.

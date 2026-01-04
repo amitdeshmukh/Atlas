@@ -1,5 +1,5 @@
 /**
- * MCP (Model Context Protocol) server for AxOntology.
+ * MCP (Model Context Protocol) server for Atlas.
  * Provides a tool-based interface for LLM agents to interact with the world model.
  */
 
@@ -19,7 +19,7 @@ export function createMCPServer(options: MCPServerOptions): FastMCP {
   const { worldModel } = options;
 
   const server = new FastMCP({
-    name: 'axontology',
+    name: 'atlas',
     version: '1.0.0',
   });
 

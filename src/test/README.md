@@ -1,6 +1,6 @@
 # Integration Tests
 
-Comprehensive integration tests for the AxOntology GraphQL API.
+Comprehensive integration tests for the Atlas GraphQL API.
 
 ## Setup
 

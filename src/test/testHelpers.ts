@@ -1,5 +1,5 @@
 /**
- * Test helpers for AxOntology integration tests.
+ * Test helpers for Atlas integration tests.
  */
 
 import { Surreal } from 'surrealdb';

@@ -1,5 +1,5 @@
 /**
- * MCP resource definitions for AxOntology.
+ * MCP resource definitions for Atlas.
  * Provides browseable resources for agents to discover the world model.
  */
 
@@ -132,7 +132,19 @@ function getFilterExamplesContent(): string {
  * Helper function to generate getting started guide content.
  */
 function getGettingStartedContent(): string {
-  return `# World Model - Getting Started
+  return `# Atlas World Model - Getting Started
+
+## Overview
+
+Atlas is a **dynamic world model for multi-agent collaboration**. Agents can simultaneously explore, update, and reason over shared temporal and spatial knowledge. Each agent contributes discoveries while benefiting from the collective intelligence of all agents working in the system.
+
+## Multi-Agent Collaboration
+
+Atlas supports **multiple agents operating simultaneously**:
+- **Concurrent updates**: Agents can write in parallel without conflicts
+- **Shared discoveries**: Knowledge added by one agent is immediately available to all others
+- **Temporal consistency**: The \`validAt\`/\`invalidAt\` model ensures agents record observations as separate facts
+- **Distributed exploration**: Different agents can explore different domains while maintaining a unified world view
 
 ## Two-Layer Architecture
 
