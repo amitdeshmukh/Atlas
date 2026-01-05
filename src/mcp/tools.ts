@@ -20,7 +20,7 @@ import {
   FindInstancesSchema,
   GetInstanceSchema,
   GetInstanceEdgesSchema,
-  FindInstancePathSchema,
+  DiscoverConnectionSchema,
   // Instance mutation
   CreateInstanceSchema,
   UpdateInstanceSchema,
@@ -140,7 +140,7 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
     name: 'get_instance_edges',
     description:
       'Get DIRECT EDGES (one hop only) from an instance. ' +
-      'For multi-hop connections between instances, use find_instance_path instead. ' +
+      'For multi-hop connections between instances, use discover_connection instead. ' +
       'Returns edges with temporal data (validAt/invalidAt) for historical analysis. ' +
       'By default returns ALL edges including historical ones.',
     parameters: GetInstanceEdgesSchema,
@@ -156,13 +156,12 @@ export function registerTools(server: FastMCP, worldModel: WorldModel): void {
   });
 
   server.addTool({
-    name: 'find_instance_path',
+    name: 'discover_connection',
     description:
-      'Find how two INSTANCES connect through the data graph. ' +
-      'IMPORTANT: Use this to discover indirect connections! Direct edges may not exist, ' +
-      'but instances can connect through intermediate nodes. ' +
-      'Example: find_instance_path("tim_cook_id", "seattle_id") might show Tim→Apple→Seattle.',
-    parameters: FindInstancePathSchema,
+      'Discover how two instances connect through the graph by searching all possible paths. ' +
+      'Uses optimized bidirectional graph traversal to find connections even when no direct edge exists. ' +
+      'Example: discover_connection("node:tim_cook", "node:seattle") might reveal Tim→Apple→Seattle.',
+    parameters: DiscoverConnectionSchema,
     execute: async (args) => {
       const result = await worldModel.findInstancePaths(
         args.fromId,

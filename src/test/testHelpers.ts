@@ -703,6 +703,79 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     return paths;
   }
 
+  // ===========================================================================
+  // Instance Path Finding - Optimized with Bidirectional BFS
+  // ===========================================================================
+
+  type PathEdgeRecord = {
+    id: string;
+    relationType: string;
+    fromId: string;
+    toId: string;
+    validAt: string;
+    invalidAt: string | null;
+  };
+
+  /**
+   * Get all edges connected to a node for path finding.
+   * Queries each relation type for compatibility with SurrealDB.
+   */
+  async function getAllEdgesForNodePathFinding(nodeId: string): Promise<PathEdgeRecord[]> {
+    // Get all relation types
+    const [relTypeRows] = (await db.query(
+      /* surrealql */ `SELECT name FROM relationTypeDef;`,
+    )) as any[];
+
+    const relationTypes: string[] = (relTypeRows ?? [])
+      .map((r: any) => r.name)
+      .filter((name: string) => /^[A-Z][A-Z0-9_]*$/.test(name));
+
+    if (relationTypes.length === 0) {
+      return [];
+    }
+
+    const edges: PathEdgeRecord[] = [];
+    const seen = new Set<string>();
+
+    // Query all relation types in parallel
+    const queries = relationTypes.map((relType) =>
+      db.query(
+        /* surrealql */ `
+        SELECT id, in AS fromId, out AS toId, validAt, invalidAt
+        FROM ${relType}
+        WHERE in = type::thing($nodeId) OR out = type::thing($nodeId);
+        `,
+        { nodeId },
+      ).then((result) => ({ relType, rows: (result as any[])[0] ?? [] }))
+    );
+
+    const results = await Promise.all(queries);
+
+    for (const { relType, rows } of results) {
+      for (const row of rows) {
+        if (!row?.id) continue;
+        const edgeId = String(row.id);
+        if (seen.has(edgeId)) continue;
+        seen.add(edgeId);
+
+        edges.push({
+          id: edgeId,
+          relationType: relType,
+          fromId: String(row.fromId),
+          toId: String(row.toId),
+          validAt: row.validAt,
+          invalidAt: row.invalidAt ?? null,
+        });
+      }
+    }
+
+    return edges;
+  }
+
+  /**
+   * Bidirectional BFS: Search from BOTH ends simultaneously.
+   * Meets in the middle, reducing search space from O(b^d) to O(2 * b^(d/2)).
+   */
   async function findInstancePaths(
     fromNodeId: string,
     toNodeId: string,
@@ -712,98 +785,102 @@ function createTestAdapter(db: Surreal): StorageAdapter {
       return [{ edges: [], pathDescription: `${fromNodeId} (same node)`, depth: 0 }];
     }
 
-    const [relTypeRows] = (await db.query(
-      /* surrealql */ `SELECT name FROM relationTypeDef;`,
-    )) as any[];
-
-    const relationTypes: string[] = (relTypeRows ?? []).map((r: any) => r.name);
-
-    if (relationTypes.length === 0) {
-      return [];
-    }
-
-    type EdgeRecord = {
-      id: string;
-      relationType: string;
-      fromId: string;
-      toId: string;
-      validAt: string;
-      invalidAt: string | null;
-    };
-
-    async function getEdgesForNodeBFS(nodeId: string): Promise<EdgeRecord[]> {
-      const edges: EdgeRecord[] = [];
-
-      for (const relType of relationTypes) {
-        if (!/^[A-Z][A-Z0-9_]*$/.test(relType)) continue;
-
-        // Include ALL edges (including historical) for path finding
-        const [rows] = (await db.query(
-          /* surrealql */ `
-          SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
-          FROM ${relType}
-          WHERE (in = type::thing($nodeId) OR out = type::thing($nodeId));
-          `,
-          { nodeId },
-        )) as any[];
-
-        for (const row of rows ?? []) {
-          edges.push({
-            id: String(row.id),
-            relationType: relType,
-            fromId: String(row.fromId),
-            toId: String(row.toId),
-            validAt: row.validAt,
-            invalidAt: row.invalidAt ?? null,
-          });
-        }
-      }
-
-      return edges;
-    }
-
-    const paths: InstancePath[] = [];
-
-    interface QueueItem {
-      currentNode: string;
-      edgePath: EdgeRecord[];
+    interface FrontierItem {
+      nodeId: string;
+      edgePath: PathEdgeRecord[];
       visited: Set<string>;
     }
 
-    const queue: QueueItem[] = [
-      { currentNode: fromNodeId, edgePath: [], visited: new Set([fromNodeId]) },
+    // Forward frontier (from source)
+    const forwardFrontier: FrontierItem[] = [
+      { nodeId: fromNodeId, edgePath: [], visited: new Set([fromNodeId]) },
     ];
+    const forwardVisited = new Map<string, PathEdgeRecord[]>();
+    forwardVisited.set(fromNodeId, []);
 
-    while (queue.length > 0 && paths.length < 10) {
-      const item = queue.shift()!;
-      if (item.edgePath.length >= maxDepth) continue;
+    // Backward frontier (from target)
+    const backwardFrontier: FrontierItem[] = [
+      { nodeId: toNodeId, edgePath: [], visited: new Set([toNodeId]) },
+    ];
+    const backwardVisited = new Map<string, PathEdgeRecord[]>();
+    backwardVisited.set(toNodeId, []);
 
-      const edges = await getEdgesForNodeBFS(item.currentNode);
+    const paths: InstancePath[] = [];
+    const maxPaths = 10;
+    let currentDepth = 0;
 
-      for (const edge of edges) {
-        const nextNode = edge.fromId === item.currentNode ? edge.toId : edge.fromId;
+    while (
+      (forwardFrontier.length > 0 || backwardFrontier.length > 0) &&
+      currentDepth < maxDepth &&
+      paths.length < maxPaths
+    ) {
+      currentDepth++;
 
-        if (item.visited.has(nextNode)) continue;
+      // Expand the smaller frontier first (optimization)
+      const expandForward = forwardFrontier.length <= backwardFrontier.length;
+      const frontier = expandForward ? forwardFrontier : backwardFrontier;
+      const thisVisited = expandForward ? forwardVisited : backwardVisited;
+      const otherVisited = expandForward ? backwardVisited : forwardVisited;
 
-        const newPath = [...item.edgePath, edge];
+      const nextFrontier: FrontierItem[] = [];
+      const itemsToProcess = frontier.splice(0, frontier.length);
 
-        if (nextNode === toNodeId) {
-          const desc = newPath.map((e) => `--[${e.relationType}]-->`).join(' ');
-          paths.push({
-            edges: newPath,
-            pathDescription: `${fromNodeId} ${desc} ${toNodeId}`,
-            depth: newPath.length,
-          });
-        } else if (newPath.length < maxDepth) {
-          const newVisited = new Set(item.visited);
-          newVisited.add(nextNode);
-          queue.push({ currentNode: nextNode, edgePath: newPath, visited: newVisited });
+      for (const item of itemsToProcess) {
+        if (item.edgePath.length >= Math.ceil(maxDepth / 2) + 1) continue;
+
+        const edges = await getAllEdgesForNodePathFinding(item.nodeId);
+
+        for (const edge of edges) {
+          const nextNode = edge.fromId === item.nodeId ? edge.toId : edge.fromId;
+
+          if (item.visited.has(nextNode)) continue;
+
+          const newPath = [...item.edgePath, edge];
+
+          // Check if we've met the other frontier
+          if (otherVisited.has(nextNode)) {
+            const otherPath = otherVisited.get(nextNode)!;
+
+            let fullEdges: PathEdgeRecord[];
+            if (expandForward) {
+              fullEdges = [...newPath, ...otherPath.slice().reverse()];
+            } else {
+              fullEdges = [...otherPath, ...newPath.slice().reverse()];
+            }
+
+            if (fullEdges.length <= maxDepth) {
+              const desc = fullEdges.map((e) => `--[${e.relationType}]-->`).join(' ');
+              paths.push({
+                edges: fullEdges,
+                pathDescription: `${fromNodeId} ${desc} ${toNodeId}`,
+                depth: fullEdges.length,
+              });
+            }
+          }
+
+          if (!thisVisited.has(nextNode) && newPath.length < Math.ceil(maxDepth / 2) + 1) {
+            const newVisited = new Set(item.visited);
+            newVisited.add(nextNode);
+            nextFrontier.push({ nodeId: nextNode, edgePath: newPath, visited: newVisited });
+            thisVisited.set(nextNode, newPath);
+          }
         }
       }
+
+      frontier.push(...nextFrontier);
     }
 
-    paths.sort((a, b) => a.depth - b.depth);
-    return paths;
+    // Deduplicate and sort by depth
+    const seenPaths = new Set<string>();
+    const uniquePaths = paths.filter((p) => {
+      const key = p.edges.map((e) => e.id).join('->');
+      if (seenPaths.has(key)) return false;
+      seenPaths.add(key);
+      return true;
+    });
+
+    uniquePaths.sort((a, b) => a.depth - b.depth);
+    return uniquePaths.slice(0, maxPaths);
   }
 
   // -------------------------------------------------------------------------

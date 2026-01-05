@@ -83,10 +83,10 @@ export const GetInstanceEdgesSchema = z.object({
     .describe('When true (default), returns ALL edges including past ones. When false, only returns currently active edges.'),
 });
 
-export const FindInstancePathSchema = z.object({
-  fromId: z.string().describe('Starting instance ID'),
-  toId: z.string().describe('Target instance ID'),
-  maxDepth: z.number().default(6).describe('Maximum number of hops through edges (default: 6)'),
+export const DiscoverConnectionSchema = z.object({
+  fromId: z.string().describe('Starting instance ID (e.g., "node:tim_cook")'),
+  toId: z.string().describe('Target instance ID to find connection to (e.g., "node:seattle")'),
+  maxDepth: z.number().default(6).describe('Maximum hops to search through the graph (default: 6)'),
 });
 
 // === Instance Mutation Tools (Data Layer) ===

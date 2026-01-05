@@ -719,6 +719,328 @@ export function createSurrealAdapter(config?: SurrealConfig): StorageAdapter {
     return paths;
   }
 
+  // ===========================================================================
+  // Instance Path Finding - Optimized with Native SurrealDB + Bidirectional BFS
+  // ===========================================================================
+
+  type PathEdgeRecord = {
+    id: string;
+    relationType: string;
+    fromId: string;
+    toId: string;
+    validAt: string;
+    invalidAt: string | null;
+  };
+
+  // Cache relation types to avoid repeated queries during path finding
+  let cachedRelationTypes: string[] | null = null;
+  let cacheTimestamp = 0;
+  const CACHE_TTL_MS = 60000; // 1 minute cache
+
+  async function getRelationTypesForPathFinding(): Promise<string[]> {
+    const now = Date.now();
+    if (cachedRelationTypes && now - cacheTimestamp < CACHE_TTL_MS) {
+      return cachedRelationTypes;
+    }
+
+    const [relTypeRows] = (await db.query(
+      /* surrealql */ `SELECT name FROM relationTypeDef;`,
+    )) as any[];
+
+    const types = (relTypeRows ?? [])
+      .map((r: any) => r.name)
+      .filter((name: string) => /^[A-Z][A-Z0-9_]*$/.test(name));
+    cachedRelationTypes = types;
+    cacheTimestamp = now;
+    return types;
+  }
+
+  /**
+   * Get all edges connected to a node for path finding.
+   * Queries each relation type but uses caching to minimize overhead.
+   * 
+   * Used internally for path finding - different from getEdgesForNode which
+   * is part of the StorageAdapter interface.
+   */
+  async function getAllEdgesForNodePathFinding(nodeId: string): Promise<PathEdgeRecord[]> {
+    const relationTypes = await getRelationTypesForPathFinding();
+    
+    if (relationTypes.length === 0) {
+      return [];
+    }
+
+    const edges: PathEdgeRecord[] = [];
+    const seen = new Set<string>();
+
+    // Query all relation types in parallel for better performance
+    const queries = relationTypes.map((relType) =>
+      db.query(
+        /* surrealql */ `
+        SELECT id, in AS fromId, out AS toId, validAt, invalidAt
+        FROM ${relType}
+        WHERE in = type::thing($nodeId) OR out = type::thing($nodeId);
+        `,
+        { nodeId },
+      ).then((result) => ({ relType, rows: (result as any[])[0] ?? [] }))
+    );
+
+    const results = await Promise.all(queries);
+
+    for (const { relType, rows } of results) {
+      for (const row of rows) {
+        if (!row?.id) continue;
+        const edgeId = String(row.id);
+        if (seen.has(edgeId)) continue;
+        seen.add(edgeId);
+
+        edges.push({
+          id: edgeId,
+          relationType: relType,
+          fromId: String(row.fromId),
+          toId: String(row.toId),
+          validAt: row.validAt,
+          invalidAt: row.invalidAt ?? null,
+        });
+      }
+    }
+
+    return edges;
+  }
+
+  /**
+   * Try to use SurrealDB's native shortest path algorithm (v2.2.0+).
+   * Uses the +shortest=record:id syntax for optimal performance.
+   * Returns null if native query fails or isn't supported.
+   */
+  async function tryNativeShortestPath(
+    fromNodeId: string,
+    toNodeId: string,
+    maxDepth: number,
+  ): Promise<InstancePath | null> {
+    try {
+      // SurrealDB v2.2.0+ native shortest path with bidirectional traversal
+      // Using (<-*, ->*) to traverse any edge type in either direction
+      const [result] = (await db.query(
+        /* surrealql */ `
+        LET $from = type::thing($fromId);
+        LET $to = type::thing($toId);
+        
+        -- Use native shortest path algorithm with depth limit
+        -- The +path variant gives us the full path, not just the endpoint
+        SELECT VALUE $from.{..$maxDepth+shortest=$to}(<-*, ->*).id;
+        `,
+        { fromId: fromNodeId, toId: toNodeId, maxDepth },
+      )) as any[];
+
+      const pathNodes: string[] = result ?? [];
+      
+      if (pathNodes.length === 0) {
+        return null;
+      }
+
+      // We got a path of node IDs. Now reconstruct the edges between them.
+      // Path is [node1, node2, node3, ...] - we need edges between consecutive nodes
+      const fullPath = [fromNodeId, ...pathNodes.map(String)];
+      const edges: PathEdgeRecord[] = [];
+
+      for (let i = 0; i < fullPath.length - 1; i++) {
+        const from = fullPath[i];
+        const to = fullPath[i + 1];
+
+        // Find the edge between these two nodes
+        const [edgeResult] = (await db.query(
+          /* surrealql */ `
+          SELECT 
+            id,
+            meta::tb(id) AS relationType,
+            in AS fromId,
+            out AS toId,
+            validAt,
+            invalidAt
+          FROM (SELECT VALUE ->* FROM ONLY type::thing($from))
+          WHERE out = type::thing($to)
+          LIMIT 1;
+          `,
+          { from, to },
+        )) as any[];
+
+        let edge = edgeResult?.[0];
+        
+        // Try reverse direction if not found
+        if (!edge) {
+          const [reverseResult] = (await db.query(
+            /* surrealql */ `
+            SELECT 
+              id,
+              meta::tb(id) AS relationType,
+              in AS fromId,
+              out AS toId,
+              validAt,
+              invalidAt
+            FROM (SELECT VALUE <-* FROM ONLY type::thing($from))
+            WHERE in = type::thing($to)
+            LIMIT 1;
+            `,
+            { from, to },
+          )) as any[];
+          edge = reverseResult?.[0];
+        }
+
+        if (edge) {
+          edges.push({
+            id: String(edge.id),
+            relationType: String(edge.relationType ?? ''),
+            fromId: String(edge.fromId),
+            toId: String(edge.toId),
+            validAt: edge.validAt,
+            invalidAt: edge.invalidAt ?? null,
+          });
+        }
+      }
+
+      if (edges.length === 0) {
+        return null;
+      }
+
+      const desc = edges.map((e) => `--[${e.relationType}]-->`).join(' ');
+      return {
+        edges,
+        pathDescription: `${fromNodeId} ${desc} ${toNodeId}`,
+        depth: edges.length,
+      };
+    } catch (error) {
+      // Native query not supported or failed - return null to trigger fallback
+      console.debug(
+        `[tryNativeShortestPath] Native SurrealDB +shortest query failed:`,
+        error instanceof Error ? error.message : error
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Bidirectional BFS: Search from BOTH ends simultaneously.
+   * Meets in the middle, reducing search space from O(b^d) to O(2 * b^(d/2)).
+   * Much faster for large graphs.
+   */
+  async function findPathsBidirectionalBFS(
+    fromNodeId: string,
+    toNodeId: string,
+    maxDepth: number,
+  ): Promise<InstancePath[]> {
+    // Track visited nodes and paths from both directions
+    interface FrontierItem {
+      nodeId: string;
+      edgePath: PathEdgeRecord[];
+      visited: Set<string>;
+    }
+
+    // Forward frontier (from source)
+    const forwardFrontier: FrontierItem[] = [
+      { nodeId: fromNodeId, edgePath: [], visited: new Set([fromNodeId]) },
+    ];
+    const forwardVisited = new Map<string, PathEdgeRecord[]>(); // nodeId -> path to reach it
+    forwardVisited.set(fromNodeId, []);
+
+    // Backward frontier (from target)
+    const backwardFrontier: FrontierItem[] = [
+      { nodeId: toNodeId, edgePath: [], visited: new Set([toNodeId]) },
+    ];
+    const backwardVisited = new Map<string, PathEdgeRecord[]>(); // nodeId -> path to reach it
+    backwardVisited.set(toNodeId, []);
+
+    const paths: InstancePath[] = [];
+    const maxPaths = 10;
+    let currentDepth = 0;
+
+    // Alternate between forward and backward expansion
+    while (
+      (forwardFrontier.length > 0 || backwardFrontier.length > 0) &&
+      currentDepth < maxDepth &&
+      paths.length < maxPaths
+    ) {
+      currentDepth++;
+
+      // Expand the smaller frontier first (optimization)
+      const expandForward = forwardFrontier.length <= backwardFrontier.length;
+      const frontier = expandForward ? forwardFrontier : backwardFrontier;
+      const thisVisited = expandForward ? forwardVisited : backwardVisited;
+      const otherVisited = expandForward ? backwardVisited : forwardVisited;
+
+      const nextFrontier: FrontierItem[] = [];
+
+      // Process all items at current depth level
+      const itemsToProcess = frontier.splice(0, frontier.length);
+
+      for (const item of itemsToProcess) {
+        if (item.edgePath.length >= Math.ceil(maxDepth / 2) + 1) continue;
+
+        const edges = await getAllEdgesForNodePathFinding(item.nodeId);
+
+        for (const edge of edges) {
+          const nextNode = edge.fromId === item.nodeId ? edge.toId : edge.fromId;
+
+          if (item.visited.has(nextNode)) continue;
+
+          const newPath = [...item.edgePath, edge];
+
+          // Check if we've met the other frontier
+          if (otherVisited.has(nextNode)) {
+            // Found a meeting point! Construct the full path.
+            const otherPath = otherVisited.get(nextNode)!;
+
+            let fullEdges: PathEdgeRecord[];
+            if (expandForward) {
+              // Forward path + reversed backward path
+              fullEdges = [...newPath, ...otherPath.slice().reverse()];
+            } else {
+              // Reversed current path + forward path from other side
+              fullEdges = [...otherPath, ...newPath.slice().reverse()];
+            }
+
+            if (fullEdges.length <= maxDepth) {
+              const desc = fullEdges.map((e) => `--[${e.relationType}]-->`).join(' ');
+              paths.push({
+                edges: fullEdges,
+                pathDescription: `${fromNodeId} ${desc} ${toNodeId}`,
+                depth: fullEdges.length,
+              });
+            }
+          }
+
+          // Continue expanding if we haven't visited this node from this direction
+          if (!thisVisited.has(nextNode) && newPath.length < Math.ceil(maxDepth / 2) + 1) {
+            const newVisited = new Set(item.visited);
+            newVisited.add(nextNode);
+            nextFrontier.push({ nodeId: nextNode, edgePath: newPath, visited: newVisited });
+            thisVisited.set(nextNode, newPath);
+          }
+        }
+      }
+
+      frontier.push(...nextFrontier);
+    }
+
+    // Sort by depth (shortest first) and deduplicate
+    const seenPaths = new Set<string>();
+    const uniquePaths = paths.filter((p) => {
+      const key = p.edges.map((e) => e.id).join('->');
+      if (seenPaths.has(key)) return false;
+      seenPaths.add(key);
+      return true;
+    });
+
+    uniquePaths.sort((a, b) => a.depth - b.depth);
+    return uniquePaths.slice(0, maxPaths);
+  }
+
+  /**
+   * Find paths between two node instances.
+   * 
+   * Algorithm priority:
+   * 1. Try SurrealDB native +shortest (fastest, O(V+E) with native indexing)
+   * 2. Fall back to Bidirectional BFS (O(2 * b^(d/2)) vs O(b^d) for standard BFS)
+   */
   async function findInstancePaths(
     fromNodeId: string,
     toNodeId: string,
@@ -730,100 +1052,34 @@ export function createSurrealAdapter(config?: SurrealConfig): StorageAdapter {
 
     await ensureConnection();
 
-    // Get all relation type names
-    const [relTypeRows] = (await db.query(
-      /* surrealql */ `SELECT name FROM relationTypeDef;`,
-    )) as any[];
-
-    const relationTypes: string[] = (relTypeRows ?? []).map((r: any) => r.name);
-
-    if (relationTypes.length === 0) {
-      return [];
+    // Strategy 1: Try native SurrealDB shortest path (v2.2.0+)
+    // This leverages database-level graph indexing for O(V+E) performance
+    const nativePath = await tryNativeShortestPath(fromNodeId, toNodeId, maxDepth);
+    if (nativePath) {
+      // Native found shortest path - also run bidirectional to find alternatives
+      const alternatePaths = await findPathsBidirectionalBFS(fromNodeId, toNodeId, maxDepth);
+      
+      // Combine and deduplicate
+      const allPaths = [nativePath, ...alternatePaths];
+      const seenPaths = new Set<string>();
+      const uniquePaths = allPaths.filter((p) => {
+        const key = p.edges.map((e) => e.id).join('->');
+        if (seenPaths.has(key)) return false;
+        seenPaths.add(key);
+        return true;
+      });
+      
+      uniquePaths.sort((a, b) => a.depth - b.depth);
+      return uniquePaths.slice(0, 10);
     }
 
-    type EdgeRecord = {
-      id: string;
-      relationType: string;
-      fromId: string;
-      toId: string;
-      validAt: string;
-      invalidAt: string | null;
-    };
-
-    async function getEdgesForNodeBFS(nodeId: string): Promise<EdgeRecord[]> {
-      const edges: EdgeRecord[] = [];
-
-      for (const relType of relationTypes) {
-        if (!/^[A-Z][A-Z0-9_]*$/.test(relType)) continue;
-
-        // Include ALL edges (including historical) for path finding
-        const [rows] = (await db.query(
-          /* surrealql */ `
-          SELECT id, in AS fromId, out AS toId, validAt, invalidAt, properties
-          FROM ${relType}
-          WHERE (in = type::thing($nodeId) OR out = type::thing($nodeId));
-          `,
-          { nodeId },
-        )) as any[];
-
-        for (const row of rows ?? []) {
-          edges.push({
-            id: String(row.id),
-            relationType: relType,
-            fromId: String(row.fromId),
-            toId: String(row.toId),
-            validAt: row.validAt,
-            invalidAt: row.invalidAt ?? null,
-          });
-        }
-      }
-
-      return edges;
-    }
-
-    const paths: InstancePath[] = [];
-
-    interface QueueItem {
-      currentNode: string;
-      edgePath: EdgeRecord[];
-      visited: Set<string>;
-    }
-
-    const queue: QueueItem[] = [
-      { currentNode: fromNodeId, edgePath: [], visited: new Set([fromNodeId]) },
-    ];
-
-    while (queue.length > 0 && paths.length < 10) {
-      const item = queue.shift()!;
-
-      if (item.edgePath.length >= maxDepth) continue;
-
-      const edges = await getEdgesForNodeBFS(item.currentNode);
-
-      for (const edge of edges) {
-        const nextNode = edge.fromId === item.currentNode ? edge.toId : edge.fromId;
-
-        if (item.visited.has(nextNode)) continue;
-
-        const newPath = [...item.edgePath, edge];
-
-        if (nextNode === toNodeId) {
-          const desc = newPath.map((e) => `--[${e.relationType}]-->`).join(' ');
-          paths.push({
-            edges: newPath,
-            pathDescription: `${fromNodeId} ${desc} ${toNodeId}`,
-            depth: newPath.length,
-          });
-        } else if (newPath.length < maxDepth) {
-          const newVisited = new Set(item.visited);
-          newVisited.add(nextNode);
-          queue.push({ currentNode: nextNode, edgePath: newPath, visited: newVisited });
-        }
-      }
-    }
-
-    paths.sort((a, b) => a.depth - b.depth);
-    return paths;
+    // Strategy 2: Bidirectional BFS fallback
+    // Much faster than standard BFS: O(2 * b^(d/2)) vs O(b^d)
+    console.warn(
+      `[findInstancePaths] Native SurrealDB shortest path unavailable, falling back to Bidirectional BFS. ` +
+      `Path: ${fromNodeId} → ${toNodeId}, maxDepth: ${maxDepth}`
+    );
+    return findPathsBidirectionalBFS(fromNodeId, toNodeId, maxDepth);
   }
 
   // ===========================================================================

@@ -198,10 +198,11 @@ mutation Step5_CreateEmployment {
 }
 
 # ===================================================================
-# 4. FIND INSTANCE PATH - "How is Alice connected to Bob?"
+# 4. DISCOVER CONNECTION - "How is Alice connected to Bob?"
 # ===================================================================
-# Agent wants to find paths between specific node instances.
-# Uses iterative BFS with DB queries at each level for scalability.
+# Agent wants to discover how two instances connect through the graph.
+# MCP Tool: discover_connection
+# Uses optimized Bidirectional BFS for O(2*b^(d/2)) performance.
 
 query HowIsAliceConnectedToBob {
   findInstancePath(

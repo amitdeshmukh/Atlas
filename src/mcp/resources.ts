@@ -30,7 +30,7 @@ export function registerResources(server: FastMCP, worldModel: WorldModel): void
               'Use search_ontology to discover types and relations by meaning',
               'Use get_ontology_type or get_ontology_relation to see details about schema elements',
               'Use find_ontology_paths to see how types CAN connect',
-              'Use find_instances to query actual data, then find_instance_path for connections',
+              'Use find_instances to query actual data, then discover_connection for connections',
               'Use create_ontology_type and create_ontology_relation to extend the schema',
             ],
           },
@@ -153,7 +153,7 @@ The world model has **two distinct layers**:
 | Layer | Contains | Tools |
 |-------|----------|-------|
 | **Ontology (Schema)** | Type definitions, relation types | \`search_ontology\`, \`get_ontology_type\`, \`get_ontology_relation\`, \`find_ontology_paths\` |
-| **Instances (Data)** | Actual nodes and edges | \`find_instances\`, \`get_instance\`, \`get_instance_edges\`, \`find_instance_path\` |
+| **Instances (Data)** | Actual nodes and edges | \`find_instances\`, \`get_instance\`, \`get_instance_edges\`, \`discover_connection\` |
 
 **Think of it like a database**: the ontology is the schema (table definitions), instances are the actual rows.
 
@@ -169,7 +169,7 @@ The world model has **two distinct layers**:
 - \`find_instances("PERSON", filter: {...})\` → Find actual people matching criteria
 - \`get_instance("node:abc123")\` → Get a specific node
 - \`get_instance_edges("node:abc123")\` → Get direct edges (1 hop)
-- \`find_instance_path("node:tim", "node:seattle")\` → How ARE these connected?
+- \`discover_connection("node:tim", "node:seattle")\` → How ARE these connected?
 
 ## Recommended Workflow
 
@@ -220,7 +220,7 @@ get_instance_edges("node:tim_cook")
 
 Find indirect paths between any two instances:
 \`\`\`
-find_instance_path("node:tim_cook", "node:seattle")
+discover_connection("node:tim_cook", "node:seattle")
 \`\`\`
 
 ## Creating Data
@@ -328,16 +328,16 @@ get_list_members("TECH_EMPLOYEES")
 1. \`search_ontology("topic")\` → What types/relations exist?
 2. \`find_ontology_paths("A", "B")\` → How CAN these types connect?
 3. \`find_instances(...)\` → Find actual data
-4. \`find_instance_path(...)\` → How ARE these instances connected?
+4. \`discover_connection(...)\` → How ARE these instances connected?
 
 ### Think in Graphs
-- Use \`find_instance_path(fromId, toId)\` to discover how any two instances connect
+- Use \`discover_connection(fromId, toId)\` to discover how any two instances connect
 - **Don't assume no direct edge means no connection** - check indirect paths!
 
 Example: "Is Tim Cook connected to Seattle?"
 \`\`\`
 // Don't just check direct edges
-// Do this: find_instance_path("node:tim_cook", "node:seattle", maxDepth: 4)
+// Do this: discover_connection("node:tim_cook", "node:seattle", maxDepth: 4)
 // This finds: Tim → Apple → Seattle Office
 \`\`\`
 

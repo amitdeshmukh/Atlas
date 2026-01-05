@@ -99,8 +99,9 @@ type Query {
 
   """
   Find paths between two node INSTANCES in the world model.
-  Uses native graph traversal for scalability.
+  Uses optimized bidirectional graph traversal for scalability.
   Useful for: "How is Alice connected to Bob?"
+  MCP Tool: discover_connection
   """
   findInstancePath(
     fromNodeId: ID!

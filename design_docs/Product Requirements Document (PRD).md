@@ -296,7 +296,7 @@ When `includeHistorical = true` (default), ALL records are returned regardless o
 | Query | Purpose |
 | --- | --- |
 | `findOntologyPath(fromType, toType, maxDepth)` | Find how two types connect in the ontology |
-| `findInstancePath(fromNodeId, toNodeId, maxDepth)` | Find paths between specific entities |
+| `findInstancePath(fromNodeId, toNodeId, maxDepth)` | Find paths between specific entities (MCP: `discover_connection`) |
 | `searchRelationships(nodeId, query, limit)` | Semantic search over a node's relationships |
 
 ### 12.4 Data Queries
@@ -394,7 +394,7 @@ The MCP (Model Context Protocol) server provides a tool-based interface for LLM 
 | `find_entities` | Query nodes with filters |
 | `get_entity` | Get entity by ID |
 | `get_relationships` | Get relationships for an entity |
-| `find_path` | Find paths between entities |
+| `discover_connection` | Discover how two instances connect through graph traversal |
 
 ### 15.3 Mutation Tools
 
