@@ -53,6 +53,16 @@ async function main() {
 
   const { url: surrealUrl, namespace, database } = getSurrealConfig();
 
+  // Check database connectivity
+  let dbStatus: string;
+  try {
+    const backend = await adapter.healthCheck();
+    dbStatus = `\x1b[32m● connected\x1b[0m (${backend})`;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    dbStatus = `\x1b[31m✖ unreachable\x1b[0m — ${msg}`;
+  }
+
   console.log('');
   console.log('  ╔═══════════════════════════════════════════════════╗');
   console.log('  ║                   Atlas is running                ║');
@@ -64,9 +74,10 @@ async function main() {
   console.log('');
   console.log('  MCP Server:     stdio (local) — runs alongside via npm run dev');
   console.log('');
-  console.log('  SurrealDB:      ' + surrealUrl);
+  console.log('  Database:       ' + dbStatus);
+  console.log('  SurrealDB URL:  ' + surrealUrl);
   console.log('  Namespace:      ' + namespace);
-  console.log('  Database:       ' + database);
+  console.log('  Database name:  ' + database);
   console.log('');
   console.log('  ─── Claude Desktop MCP config ───');
   console.log('  Add to ~/Library/Application Support/Claude/claude_desktop_config.json:');

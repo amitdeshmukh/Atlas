@@ -1107,7 +1107,16 @@ export function createSurrealAdapter(config?: SurrealConfig): StorageAdapter {
   // Return the adapter
   // ===========================================================================
 
+  async function healthCheck(): Promise<string> {
+    await ensureConnection();
+    await db.query('RETURN true;');
+    return 'surrealdb';
+  }
+
   return {
+    // Health
+    healthCheck,
+
     // Nodes
     getNodeById,
     getNodesByType,

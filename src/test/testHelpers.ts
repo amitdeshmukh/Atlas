@@ -927,6 +927,7 @@ function createTestAdapter(db: Surreal): StorageAdapter {
     findOntologyPaths,
     findInstancePaths,
     getOntologySummary,
+    healthCheck: async () => 'surrealdb',
   };
 }
 

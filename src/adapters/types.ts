@@ -200,6 +200,12 @@ export interface StorageAdapter {
    * Get a summary of the ontology (counts).
    */
   getOntologySummary(): Promise<OntologySummary>;
+
+  /**
+   * Check if the database is reachable and responsive.
+   * Returns the backend type name on success, throws on failure.
+   */
+  healthCheck(): Promise<string>;
 }
 
 // ============================================================================
