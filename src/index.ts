@@ -13,7 +13,7 @@ import { createStorageAdapter } from './adapters/index.js';
 import { WorldModel } from './core/worldModel.js';
 import { createGraphQLServer, startGraphQLServer } from './graphql/server.js';
 import { runOntologyBootstrap } from './bootstrap/ontologyBootstrap.js';
-import { getServerConfig } from './config.js';
+import { getServerConfig, getSurrealConfig } from './config.js';
 import { registerConfigRoutes } from './api/configRoutes.js';
 
 async function main() {
@@ -44,16 +44,47 @@ async function main() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   await app.register(fastifyStatic, {
     root: path.join(__dirname, 'web'),
-    prefix: '/graph/',
+    prefix: '/ui/',
   });
 
   // Start the server
   const { port } = getServerConfig();
   await startGraphQLServer(app, '0.0.0.0', port);
 
-  console.log(`[GraphQL] Server running at http://localhost:${port}/graphql`);
-  console.log(`[GraphQL] GraphiQL available at http://localhost:${port}/graphiql`);
-  console.log(`[Visualizer] UI available at http://localhost:${port}/graph/`);
+  const { url: surrealUrl, namespace, database } = getSurrealConfig();
+
+  console.log('');
+  console.log('  ╔═══════════════════════════════════════════════════╗');
+  console.log('  ║                   Atlas is running                ║');
+  console.log('  ╚═══════════════════════════════════════════════════╝');
+  console.log('');
+  console.log('  GraphQL API:    http://localhost:' + port + '/graphql');
+  console.log('  GraphiQL UI:    http://localhost:' + port + '/graphiql');
+  console.log('  Visualizer:     http://localhost:' + port + '/ui/');
+  console.log('');
+  console.log('  MCP Server:     stdio (local) — runs alongside via npm run dev');
+  console.log('');
+  console.log('  SurrealDB:      ' + surrealUrl);
+  console.log('  Namespace:      ' + namespace);
+  console.log('  Database:       ' + database);
+  console.log('');
+  console.log('  ─── Claude Desktop MCP config ───');
+  console.log('  Add to ~/Library/Application Support/Claude/claude_desktop_config.json:');
+  console.log('');
+  console.log('  {');
+  console.log('    "mcpServers": {');
+  console.log('      "atlas": {');
+  console.log('        "command": "node",');
+  console.log('        "args": ["' + path.resolve(__dirname, '..', 'dist', 'mcpServer.js') + '"],');
+  console.log('        "env": {');
+  console.log('          "SURREAL_URL": "' + surrealUrl + '",');
+  console.log('          "SURREAL_NS": "' + namespace + '",');
+  console.log('          "SURREAL_DB": "' + database + '"');
+  console.log('        }');
+  console.log('      }');
+  console.log('    }');
+  console.log('  }');
+  console.log('');
 }
 
 main().catch((err) => {
