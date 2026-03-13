@@ -4,12 +4,7 @@
  * This starts only the MCP server with stdio transport for testing.
  */
 
-import { createStorageAdapter } from './adapters/index.js';
-import { WorldModel } from './core/worldModel.js';
-import { createMCPServer, startMCPServer } from './mcp/server.js';
-import { runOntologyBootstrap } from './bootstrap/ontologyBootstrap.js';
-
-// Set MCP_MODE immediately (though imports have already run by now)
+// Set MCP_MODE before any imports so config.ts skips dotenv
 process.env.MCP_MODE = 'true';
 
 // Suppress all non-MCP output for clean stdio JSON-RPC communication
@@ -18,6 +13,12 @@ console.error = () => {};
 console.warn = () => {};
 console.info = () => {};
 console.debug = () => {};
+
+// Dynamic imports after environment is configured
+const { createStorageAdapter } = await import('./adapters/index.js');
+const { WorldModel } = await import('./core/worldModel.js');
+const { createMCPServer, startMCPServer } = await import('./mcp/server.js');
+const { runOntologyBootstrap } = await import('./bootstrap/ontologyBootstrap.js');
 
 async function main() {
   try {
